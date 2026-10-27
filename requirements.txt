@@ -1,0 +1,7 @@
+fastapi[standard]==0.139.0
+sqlalchemy==2.0.51
+pydantic==2.13.4
+sqlalchemy-libsql==0.2.0; sys_platform == "linux"
+itsdangerous==2.2.0
+python-dotenv==1.2.2
+httpx==0.28.1

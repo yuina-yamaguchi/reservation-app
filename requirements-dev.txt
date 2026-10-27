@@ -1,0 +1,4 @@
+-r requirements.txt
+pytest==9.0.1
+pillow==12.3.0
+fastapi-cloud-cli==0.26.0

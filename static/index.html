@@ -1,0 +1,290 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#16a34a">
+  <meta name="description" content="学生マンションやシェアハウスで車を共有するための予約管理アプリ">
+  <link rel="manifest" href="/manifest.json">
+  <link rel="apple-touch-icon" href="/static/icons/apple-touch-icon.png">
+  <link rel="stylesheet" href="/static/app.css">
+  <title>予約アプリ</title>
+</head>
+<body>
+  <svg xmlns="http://www.w3.org/2000/svg" class="svg-sprite" aria-hidden="true">
+    <symbol id="icon-home" viewBox="0 0 24 24">
+      <path d="M3 10.5 12 3l9 7.5"/>
+      <path d="M5 9.5V21h14V9.5"/>
+      <path d="M9.5 21v-6h5v6"/>
+    </symbol>
+    <symbol id="icon-calendar-plus" viewBox="0 0 24 24">
+      <rect x="3" y="5" width="18" height="16" rx="2"/>
+      <path d="M8 3v4M16 3v4M3 10h18"/>
+      <path d="M12 13v5M9.5 15.5h5"/>
+    </symbol>
+    <symbol id="icon-list" viewBox="0 0 24 24">
+      <path d="M8 6h13M8 12h13M8 18h13"/>
+      <circle cx="4" cy="6" r="1"/>
+      <circle cx="4" cy="12" r="1"/>
+      <circle cx="4" cy="18" r="1"/>
+    </symbol>
+    <symbol id="icon-settings" viewBox="0 0 24 24">
+      <path d="M4 6h16M4 12h16M4 18h16"/>
+      <circle cx="9" cy="6" r="2"/>
+      <circle cx="15" cy="12" r="2"/>
+      <circle cx="7" cy="18" r="2"/>
+    </symbol>
+    <symbol id="icon-logout" viewBox="0 0 24 24">
+      <path d="M10 17l5-5-5-5"/>
+      <path d="M15 12H3"/>
+      <path d="M14 3h5a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-5"/>
+    </symbol>
+    <symbol id="icon-car" viewBox="0 0 24 24">
+      <path d="M5 16l1.6-5.6A2 2 0 0 1 8.5 9h7a2 2 0 0 1 1.9 1.4L19 16"/>
+      <path d="M4 16h16v3H4z"/>
+      <circle cx="7.5" cy="19" r="1.5"/>
+      <circle cx="16.5" cy="19" r="1.5"/>
+    </symbol>
+    <symbol id="icon-user" viewBox="0 0 24 24">
+      <circle cx="12" cy="8" r="3.5"/>
+      <path d="M5 20c0-3.5 3-6 7-6s7 2.5 7 6"/>
+    </symbol>
+    <symbol id="icon-edit" viewBox="0 0 24 24">
+      <path d="M12 20h9"/>
+      <path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z"/>
+    </symbol>
+    <symbol id="icon-trash" viewBox="0 0 24 24">
+      <path d="M4 7h16M9 7V4h6v3M6 7l1 14h10l1-14"/>
+      <path d="M10 11v6M14 11v6"/>
+    </symbol>
+  </svg>
+
+  <div id="boot" class="boot-screen">
+    <div class="boot-spinner" aria-hidden="true"></div>
+    <p>読み込み中...</p>
+  </div>
+
+  <section id="loginScreen" class="login-screen" hidden>
+    <div class="login-card">
+      <div class="brand-mark brand-mark--large" aria-hidden="true">
+        <svg class="icon"><use href="#icon-car"></use></svg>
+      </div>
+      <h1>予約アプリ</h1>
+      <p class="login-lead">学生マンションの住人で車を共有するための予約管理</p>
+      <form id="loginForm" class="stack" novalidate>
+        <input type="text" name="username" autocomplete="username" value="family" hidden>
+        <div class="field">
+          <label for="password">パスワード</label>
+          <input id="password" name="password" type="password" autocomplete="current-password" placeholder="パスワードを入力" required>
+        </div>
+        <button id="loginSubmit" class="btn btn-primary btn-block" type="submit">ログイン</button>
+        <p id="loginError" class="form-error" role="alert" hidden></p>
+      </form>
+      <p class="login-note">パスワードは管理者から共有されたものを入力してください。</p>
+    </div>
+  </section>
+
+  <div id="app" class="app-shell" hidden>
+    <aside class="sidebar">
+      <div class="brand">
+        <div class="brand-mark" aria-hidden="true">
+          <svg class="icon"><use href="#icon-car"></use></svg>
+        </div>
+        <div>
+          <strong>予約アプリ</strong>
+          <span>CAR RESERVATION</span>
+        </div>
+      </div>
+
+      <nav class="side-nav" aria-label="メインナビゲーション">
+        <button class="nav-link is-active" data-tab="home" type="button">
+          <svg class="icon"><use href="#icon-home"></use></svg><span>ホーム</span>
+        </button>
+        <button class="nav-link" data-tab="reserve" type="button">
+          <svg class="icon"><use href="#icon-calendar-plus"></use></svg><span>予約する</span>
+        </button>
+        <button class="nav-link" data-tab="list" type="button">
+          <svg class="icon"><use href="#icon-list"></use></svg><span>予約一覧</span>
+        </button>
+        <button class="nav-link" data-tab="settings" type="button">
+          <svg class="icon"><use href="#icon-settings"></use></svg><span>設定</span>
+        </button>
+      </nav>
+
+      <button id="logoutBtn" class="nav-link nav-link--logout" type="button">
+        <svg class="icon"><use href="#icon-logout"></use></svg><span>ログアウト</span>
+      </button>
+    </aside>
+
+    <div class="main-wrap">
+      <header class="topbar">
+        <div>
+          <p class="eyebrow" id="todayLabel"></p>
+          <h1 id="pageTitle">ホーム</h1>
+        </div>
+        <button id="logoutBtnMobile" class="icon-btn" type="button" aria-label="ログアウト">
+          <svg class="icon"><use href="#icon-logout"></use></svg>
+        </button>
+      </header>
+
+      <main class="content">
+        <section id="panel-home" class="tab-panel">
+          <div id="carStatusList" class="car-grid"></div>
+
+          <div class="section-head">
+            <h2>直近の予約</h2>
+            <button class="btn btn-ghost btn-small" data-go-tab="list" type="button">すべて見る</button>
+          </div>
+          <div id="homeUpcoming" class="stack"></div>
+        </section>
+
+        <section id="panel-reserve" class="tab-panel" hidden>
+          <div class="card form-card">
+            <h2>新しい予約</h2>
+            <p class="muted">車・利用者・日時を選んで予約します。</p>
+            <form id="reservationForm" class="form-grid">
+              <div class="field">
+                <label for="reserveCar">車</label>
+                <select id="reserveCar" name="car_id" required></select>
+              </div>
+              <div class="field">
+                <label for="reserveMember">利用者</label>
+                <select id="reserveMember" name="member_id" required></select>
+              </div>
+              <div class="field">
+                <label for="startTime">開始日時</label>
+                <input id="startTime" name="start_time" type="datetime-local" required>
+              </div>
+              <div class="field">
+                <label for="endTime">終了日時</label>
+                <input id="endTime" name="end_time" type="datetime-local" required>
+              </div>
+              <div class="field field--full">
+                <label for="note">メモ（任意）</label>
+                <input id="note" name="note" type="text" maxlength="500" placeholder="例：買い物、送迎">
+              </div>
+              <div class="form-actions field--full">
+                <button id="reserveSubmit" class="btn btn-primary" type="submit">予約する</button>
+              </div>
+            </form>
+          </div>
+        </section>
+
+        <section id="panel-list" class="tab-panel" hidden>
+          <div class="section-head">
+            <h2>今後の予約</h2>
+          </div>
+          <div id="upcomingList" class="stack"></div>
+
+          <div class="section-head section-head--spaced">
+            <h2>過去の予約</h2>
+          </div>
+          <div id="pastList" class="stack"></div>
+        </section>
+
+        <section id="panel-settings" class="tab-panel" hidden>
+          <div class="settings-grid">
+            <div class="card">
+              <div class="section-head">
+                <h2>車</h2>
+              </div>
+              <div id="carSettingsList" class="stack"></div>
+
+              <form id="carForm" class="stack form-inline">
+                <h3>車を追加</h3>
+                <div class="field">
+                  <label for="carName">車名</label>
+                  <input id="carName" name="name" type="text" maxlength="100" placeholder="例：プリウス" required>
+                </div>
+                <div class="field">
+                  <label for="carPlate">ナンバー</label>
+                  <input id="carPlate" name="plate" type="text" maxlength="100" placeholder="例：品川 300 あ 1234" required>
+                </div>
+                <div class="field">
+                  <label for="carColor">色</label>
+                  <input id="carColor" name="color" type="text" maxlength="50" placeholder="例：白" required>
+                </div>
+                <button class="btn btn-primary" type="submit">追加する</button>
+              </form>
+            </div>
+
+            <div class="card">
+              <div class="section-head">
+                <h2>住人</h2>
+              </div>
+              <div id="memberSettingsList" class="stack"></div>
+
+              <form id="memberForm" class="stack form-inline">
+                <h3>住人を追加</h3>
+                <div class="field">
+                  <label for="memberName">部屋番号または名字</label>
+                  <input id="memberName" name="name" type="text" maxlength="100" placeholder="例：101 / 山田" required>
+                  <p class="form-hint">部屋番号（例：101）または名字（例：山田）で登録できます。</p>
+                </div>
+                <button class="btn btn-primary" type="submit">追加する</button>
+              </form>
+            </div>
+          </div>
+        </section>
+      </main>
+    </div>
+
+    <nav class="bottom-nav" aria-label="メインナビゲーション">
+      <button class="bottom-link is-active" data-tab="home" type="button">
+        <svg class="icon"><use href="#icon-home"></use></svg><span>ホーム</span>
+      </button>
+      <button class="bottom-link" data-tab="reserve" type="button">
+        <svg class="icon"><use href="#icon-calendar-plus"></use></svg><span>予約する</span>
+      </button>
+      <button class="bottom-link" data-tab="list" type="button">
+        <svg class="icon"><use href="#icon-list"></use></svg><span>予約一覧</span>
+      </button>
+      <button class="bottom-link" data-tab="settings" type="button">
+        <svg class="icon"><use href="#icon-settings"></use></svg><span>設定</span>
+      </button>
+    </nav>
+  </div>
+
+  <div id="toast" class="toast" role="status" aria-live="polite" hidden></div>
+
+  <dialog id="carDialog" class="dialog">
+    <form id="carEditForm" class="stack">
+      <h2>車を編集</h2>
+      <input type="hidden" id="editCarId">
+      <div class="field">
+        <label for="editCarName">車名</label>
+        <input id="editCarName" type="text" maxlength="100" required>
+      </div>
+      <div class="field">
+        <label for="editCarPlate">ナンバー</label>
+        <input id="editCarPlate" type="text" maxlength="100" required>
+      </div>
+      <div class="field">
+        <label for="editCarColor">色</label>
+        <input id="editCarColor" type="text" maxlength="50" required>
+      </div>
+      <div class="dialog-actions">
+        <button type="button" class="btn btn-ghost" data-close-dialog="carDialog">キャンセル</button>
+        <button type="submit" class="btn btn-primary">保存</button>
+      </div>
+    </form>
+  </dialog>
+
+  <dialog id="memberDialog" class="dialog">
+    <form id="memberEditForm" class="stack">
+      <h2>住人を編集</h2>
+      <input type="hidden" id="editMemberId">
+      <div class="field">
+        <label for="editMemberName">部屋番号または名字</label>
+        <input id="editMemberName" type="text" maxlength="100" placeholder="例：101 / 山田" required>
+      </div>
+      <div class="dialog-actions">
+        <button type="button" class="btn btn-ghost" data-close-dialog="memberDialog">キャンセル</button>
+        <button type="submit" class="btn btn-primary">保存</button>
+      </div>
+    </form>
+  </dialog>
+
+  <script src="/static/app.js" defer></script>
+</body>
+</html>
