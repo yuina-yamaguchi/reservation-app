@@ -8,7 +8,7 @@ from . import models
 from .auth import require_admin, require_auth
 from .bootstrap import ensure_default_admin
 from .database import Base, engine
-from .routers import admin, auth, cars, members, reservations, users
+from .routers import admin, auth, cars, members, reservations, state, users
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 STATIC_DIR = BASE_DIR / "static"
@@ -36,6 +36,7 @@ app.include_router(
     admin.router, prefix="/api", dependencies=[Depends(require_admin)]
 )
 app.include_router(users.router, prefix="/api")
+app.include_router(state.router, prefix="/api")
 
 
 @app.get("/api/health", tags=["システム"])

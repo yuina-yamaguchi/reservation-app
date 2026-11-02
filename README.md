@@ -177,6 +177,7 @@ python -m pytest -q
 | POST | `/api/auth/logout` | 不要 | ログアウト |
 | GET | `/api/auth/me` | ログイン済み | ログイン中のユーザー情報 |
 | GET | `/api/health` | 不要 | ヘルスチェック |
+| GET | `/api/state/` | ログイン済み | 車・住人・予約・ユーザーを一括取得 |
 | POST | `/api/admin/seed` | 管理者 | 空のテーブルに初期データを投入 |
 | GET | `/api/cars/` | ログイン済み | 車一覧 |
 | POST | `/api/cars/` | 管理者 | 車を登録 |
@@ -219,6 +220,10 @@ python -m pytest -q
 `sqlalchemy-libsql` はネイティブ拡張を必要とするため、`requirements.txt` では
 Linux（FastAPI Cloudなどのデプロイ環境）に限定してインストールする指定にしています。
 Windows/macOSのローカル開発ではSQLiteを使うためインストールされません。
+
+Turso接続では `libsql-experimental` の並行利用時にpanicする既知問題を避けるため、
+`NullPool` と `pool_reset_on_return=None` を使用しています。接続はリクエストごとに
+作成・破棄されるため、初期表示は `/api/state/` でデータを一括取得します。
 
 ## FastAPI Cloud + Turso へのデプロイ
 

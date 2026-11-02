@@ -4,6 +4,7 @@ from pathlib import Path
 from dotenv import load_dotenv
 from sqlalchemy import create_engine
 from sqlalchemy.orm import declarative_base, sessionmaker
+from sqlalchemy.pool import NullPool
 
 load_dotenv()
 
@@ -17,6 +18,13 @@ def _create_engine():
         connect_args = {}
         if database_url.startswith("sqlite"):
             connect_args["check_same_thread"] = False
+        if "libsql" in database_url:
+            return create_engine(
+                database_url,
+                connect_args=connect_args,
+                poolclass=NullPool,
+                pool_reset_on_return=None,
+            )
         return create_engine(database_url, connect_args=connect_args)
 
     turso_url = os.getenv("TURSO_DATABASE_URL", "").strip()
@@ -29,6 +37,8 @@ def _create_engine():
         return create_engine(
             f"sqlite+{turso_url}?secure=true",
             connect_args={"auth_token": turso_token},
+            poolclass=NullPool,
+            pool_reset_on_return=None,
         )
 
     db_path = Path(os.getenv("DATABASE_PATH", str(DEFAULT_DB_PATH)))

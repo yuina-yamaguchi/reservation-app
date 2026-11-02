@@ -138,3 +138,10 @@ class ReservationResponse(BaseModel):
     member: MemberResponse
 
     model_config = {"from_attributes": True}
+
+
+class StateResponse(BaseModel):
+    cars: list[CarResponse]
+    members: list[MemberResponse]
+    reservations: list[ReservationResponse]
+    users: list[UserResponse]

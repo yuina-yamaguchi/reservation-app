@@ -397,21 +397,12 @@ async function logout() {
 
 async function loadAll() {
   try {
-    const requests = [
-      apiFetch('/cars/'),
-      apiFetch('/members/'),
-      apiFetch('/reservations/'),
-    ];
-    if (isAdmin()) {
-      requests.push(apiFetch('/users/'));
-    }
+    const data = await apiFetch('/state/');
 
-    const [cars, members, reservations, users = []] = await Promise.all(requests);
-
-    state.cars = cars;
-    state.members = members;
-    state.reservations = reservations;
-    state.users = users;
+    state.cars = data.cars;
+    state.members = data.members;
+    state.reservations = data.reservations;
+    state.users = data.users || [];
 
     renderAll();
     saveCachedState();
