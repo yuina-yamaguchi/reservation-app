@@ -217,9 +217,9 @@
               <form id="memberForm" class="stack form-inline">
                 <h3>住人を追加</h3>
                 <div class="field">
-                  <label for="memberName">部屋番号または名字</label>
-                  <input id="memberName" name="name" type="text" maxlength="100" placeholder="例：101 / 山田" required>
-                  <p class="form-hint">部屋番号（例：101）または名字（例：山田）で登録できます。</p>
+                  <label for="memberName">名字</label>
+                  <input id="memberName" name="name" type="text" maxlength="100" placeholder="例：山田" required>
+                  <p class="form-hint">部屋番号は個人情報保護のため登録できません。</p>
                 </div>
                 <button class="btn btn-primary" type="submit">追加する</button>
               </form>
@@ -275,8 +275,8 @@
       <h2>住人を編集</h2>
       <input type="hidden" id="editMemberId">
       <div class="field">
-        <label for="editMemberName">部屋番号または名字</label>
-        <input id="editMemberName" type="text" maxlength="100" placeholder="例：101 / 山田" required>
+        <label for="editMemberName">名字</label>
+        <input id="editMemberName" type="text" maxlength="100" placeholder="例：山田" required>
       </div>
       <div class="dialog-actions">
         <button type="button" class="btn btn-ghost" data-close-dialog="memberDialog">キャンセル</button>

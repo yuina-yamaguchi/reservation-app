@@ -8,7 +8,7 @@ DEFAULT_CARS = [
     {"name": "フィット", "plate": "品川 100 う 9012", "color": "シルバー"},
 ]
 
-DEFAULT_MEMBERS = ["101", "102", "201", "202"]
+DEFAULT_MEMBERS = ["山田", "佐藤", "鈴木", "高橋"]
 
 
 def seed_defaults(db: Session) -> dict[str, int]:

@@ -1,7 +1,7 @@
 # 予約アプリ
 
 学生マンションやシェアハウスなどで複数の車を共有するための、レスポンシブWeb＋PWAの予約管理アプリです。
-住人は部屋番号または名字のどちらでも登録できます。
+住人は名字で登録します。部屋番号は個人情報保護のため登録できません。
 パスワードで保護され、スマートフォンのホーム画面に追加してアプリのように使えます。
 
 ## 本番環境
@@ -14,7 +14,7 @@
 
 - パスワードログイン（署名付きCookie）
 - 車の登録・編集・削除
-- 住人（部屋番号または名字）の登録・編集・削除
+- 住人（名字）の登録・編集・削除
 - 車・利用者・日時を指定した予約
 - 同じ車の時間帯重複を防止
 - 予約一覧（今後・過去）とキャンセル
@@ -61,6 +61,8 @@ car-manager/
 ├── tests/
 ├── seed.py                # ローカル用の初期データ投入
 ├── seed_remote.py         # デプロイ済みアプリへの初期データ投入
+├── remove_room_number_members.py  # 部屋番号住人の削除（ローカル用）
+├── remove_room_number_members_remote.py  # 部屋番号住人の削除（本番用）
 ├── generate_icons.py      # PWAアイコン生成（開発用）
 ├── requirements.txt
 ├── requirements-dev.txt
@@ -96,9 +98,23 @@ pip install -r requirements-dev.txt
 python seed.py
 ```
 
-車3台（プリウス・ヴォクシー・フィット）と住人4人（部屋番号）が登録されます。
+車3台（プリウス・ヴォクシー・フィット）と住人4人（名字）が登録されます。
 既にデータがある場合はスキップされるため、再実行しても安全です。
 既存のDBに住人が登録済みの場合は変更されないため、設定画面から編集してください。
+部屋番号で登録済みの住人がいる場合は、次のスクリプトで削除できます。
+予約がある住人はスキップされるため、先に予約をキャンセルしてから再実行してください。
+
+```powershell
+python remove_room_number_members.py
+```
+
+デプロイ済みアプリの場合は次を使います。パスワードは実行時に非表示で入力されます。
+
+```powershell
+$env:APP_URL = "https://reservation-app.fastapicloud.dev"
+python remove_room_number_members_remote.py
+Remove-Item Env:APP_URL
+```
 
 ### 4. サーバー起動
 
@@ -138,7 +154,7 @@ python -m pytest -q
 | PUT | `/api/cars/{id}` | 車を更新 |
 | DELETE | `/api/cars/{id}` | 車を削除（予約ありは409） |
 | GET | `/api/members/` | 住人一覧 |
-| POST | `/api/members/` | 住人を登録（部屋番号または名字） |
+| POST | `/api/members/` | 住人を登録（名字） |
 | PUT | `/api/members/{id}` | 住人を更新 |
 | DELETE | `/api/members/{id}` | 住人を削除（予約ありは409） |
 | GET | `/api/reservations/` | 予約一覧（開始日時順） |
@@ -284,4 +300,4 @@ python seed.py
 ## Service Workerの更新
 
 フロントエンドを更新した際は、`static/service-worker.js` の `CACHE_NAME` を
-`reservation-app-v3` のように変更すると、古いキャッシュを確実に破棄できます。
+`reservation-app-v4` のように変更すると、古いキャッシュを確実に破棄できます。

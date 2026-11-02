@@ -1,6 +1,9 @@
+import re
 from datetime import datetime
 
 from pydantic import BaseModel, Field, field_validator, model_validator
+
+ROOM_NUMBER_PATTERN = re.compile(r"^[A-Za-z]?-?\d+(?:-\d+)?(?:号室)?$")
 
 
 # ── 車 ──────────────────────────────────────────
@@ -36,17 +39,17 @@ class CarResponse(CarBase):
 class MemberBase(BaseModel):
     name: str = Field(max_length=100)
 
+
+class MemberCreate(MemberBase):
     @field_validator("name")
     @classmethod
-    def not_blank(cls, value: str) -> str:
+    def validate_name(cls, value: str) -> str:
         value = value.strip()
         if not value:
             raise ValueError("入力してください")
+        if ROOM_NUMBER_PATTERN.fullmatch(value):
+            raise ValueError("部屋番号は登録できません。名字を入力してください")
         return value
-
-
-class MemberCreate(MemberBase):
-    pass
 
 
 class MemberResponse(MemberBase):

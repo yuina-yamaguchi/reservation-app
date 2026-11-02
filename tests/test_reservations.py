@@ -14,7 +14,7 @@ def create_car(client, name="プリウス"):
     return response.json()
 
 
-def create_member(client, name="101"):
+def create_member(client, name="山田"):
     response = client.post("/api/members/", json={"name": name})
     assert response.status_code == 201
     return response.json()
@@ -38,11 +38,17 @@ def test_requires_login(client):
     assert response.status_code == 401
 
 
-def test_member_accepts_room_number_or_surname(auth_client):
-    for name in ("101", "山田"):
+def test_member_accepts_surname(auth_client):
+    response = auth_client.post("/api/members/", json={"name": "山田"})
+    assert response.status_code == 201
+    assert response.json()["name"] == "山田"
+
+
+def test_member_rejects_room_number(auth_client):
+    for name in ("101", "A-101", "101号室"):
         response = auth_client.post("/api/members/", json={"name": name})
-        assert response.status_code == 201
-        assert response.json()["name"] == name
+        assert response.status_code == 422
+        assert "部屋番号" in response.text
 
 
 def test_create_and_list_reservation(auth_client):
