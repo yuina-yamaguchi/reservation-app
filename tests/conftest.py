@@ -15,6 +15,7 @@ os.environ["COOKIE_SECURE"] = "false"
 from fastapi.testclient import TestClient  # noqa: E402
 
 from app import auth  # noqa: E402
+from app.bootstrap import ensure_default_admin  # noqa: E402
 from app.database import Base, engine  # noqa: E402
 from app.main import app  # noqa: E402
 
@@ -23,6 +24,7 @@ from app.main import app  # noqa: E402
 def clean_database():
     Base.metadata.drop_all(bind=engine)
     Base.metadata.create_all(bind=engine)
+    ensure_default_admin()
     auth.reset_all_login_attempts()
     yield
     Base.metadata.drop_all(bind=engine)
@@ -37,7 +39,8 @@ def client():
 @pytest.fixture
 def auth_client(client):
     response = client.post(
-        "/api/auth/login", json={"password": "test-password"}
+        "/api/auth/login",
+        json={"username": "admin", "password": "test-password"},
     )
     assert response.status_code == 200
     return client

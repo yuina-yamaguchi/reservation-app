@@ -1,13 +1,17 @@
 'use strict';
 
 const API = '/api';
-const CACHE_KEY = 'reservation-app-state-v1';
+const CACHE_KEY = 'reservation-app-state-v2';
 
 const state = {
   cars: [],
   members: [],
   reservations: [],
+  users: [],
+  currentUser: null,
   activeTab: 'home',
+  calendarCursor: startOfMonth(new Date()),
+  selectedDate: startOfDay(new Date()),
 };
 
 const TAB_TITLES = {
@@ -26,10 +30,12 @@ const els = {
   loginForm: $('#loginForm'),
   loginSubmit: $('#loginSubmit'),
   loginError: $('#loginError'),
+  username: $('#username'),
   password: $('#password'),
   app: $('#app'),
   todayLabel: $('#todayLabel'),
   pageTitle: $('#pageTitle'),
+  currentUserBadge: $('#currentUserBadge'),
   carStatusList: $('#carStatusList'),
   homeUpcoming: $('#homeUpcoming'),
   reserveCar: $('#reserveCar'),
@@ -39,28 +45,73 @@ const els = {
   endTime: $('#endTime'),
   note: $('#note'),
   reserveSubmit: $('#reserveSubmit'),
-  upcomingList: $('#upcomingList'),
+  calendarTitle: $('#calendarTitle'),
+  calendarPrev: $('#calendarPrev'),
+  calendarToday: $('#calendarToday'),
+  calendarNext: $('#calendarNext'),
+  calendarGrid: $('#calendarGrid'),
+  calendarDayList: $('#calendarDayList'),
+  selectedDayTitle: $('#selectedDayTitle'),
   pastList: $('#pastList'),
   carSettingsList: $('#carSettingsList'),
   memberSettingsList: $('#memberSettingsList'),
+  userSettingsList: $('#userSettingsList'),
   carForm: $('#carForm'),
   carName: $('#carName'),
   carPlate: $('#carPlate'),
   carColor: $('#carColor'),
   memberForm: $('#memberForm'),
   memberName: $('#memberName'),
+  userForm: $('#userForm'),
+  userName: $('#userName'),
+  userPassword: $('#userPassword'),
+  userRole: $('#userRole'),
+  userMember: $('#userMember'),
   toast: $('#toast'),
   carDialog: $('#carDialog'),
   memberDialog: $('#memberDialog'),
+  userDialog: $('#userDialog'),
   carEditForm: $('#carEditForm'),
   memberEditForm: $('#memberEditForm'),
+  userEditForm: $('#userEditForm'),
   editCarId: $('#editCarId'),
   editCarName: $('#editCarName'),
   editCarPlate: $('#editCarPlate'),
   editCarColor: $('#editCarColor'),
   editMemberId: $('#editMemberId'),
   editMemberName: $('#editMemberName'),
+  editUserId: $('#editUserId'),
+  editUserName: $('#editUserName'),
+  editUserPassword: $('#editUserPassword'),
+  editUserRole: $('#editUserRole'),
+  editUserMember: $('#editUserMember'),
 };
+
+function startOfDay(date) {
+  return new Date(date.getFullYear(), date.getMonth(), date.getDate());
+}
+
+function startOfMonth(date) {
+  return new Date(date.getFullYear(), date.getMonth(), 1);
+}
+
+function endOfDay(date) {
+  return new Date(date.getFullYear(), date.getMonth(), date.getDate() + 1);
+}
+
+function dateKey(date) {
+  const pad = (number) => String(number).padStart(2, '0');
+  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`;
+}
+
+function parseDateKey(value) {
+  const [year, month, day] = value.split('-').map(Number);
+  return new Date(year, month - 1, day);
+}
+
+function isAdmin() {
+  return state.currentUser?.role === 'admin';
+}
 
 function saveCachedState() {
   try {
@@ -70,6 +121,7 @@ function saveCachedState() {
         cars: state.cars,
         members: state.members,
         reservations: state.reservations,
+        currentUser: state.currentUser,
         savedAt: Date.now(),
       })
     );
@@ -108,10 +160,18 @@ function applyState(data) {
   state.cars = data.cars;
   state.members = data.members;
   state.reservations = data.reservations;
+  if (data.currentUser) {
+    state.currentUser = data.currentUser;
+  }
+  renderAll();
+}
+
+function renderAll() {
   renderSelects();
   renderHome();
   renderReservationLists();
   renderSettings();
+  applyRoleUI();
 }
 
 const HTML_ESCAPES = {
@@ -140,6 +200,17 @@ const timeFormatter = new Intl.DateTimeFormat('ja-JP', {
 
 const todayFormatter = new Intl.DateTimeFormat('ja-JP', {
   year: 'numeric',
+  month: 'long',
+  day: 'numeric',
+  weekday: 'long',
+});
+
+const monthFormatter = new Intl.DateTimeFormat('ja-JP', {
+  year: 'numeric',
+  month: 'long',
+});
+
+const selectedDayFormatter = new Intl.DateTimeFormat('ja-JP', {
   month: 'long',
   day: 'numeric',
   weekday: 'long',
@@ -229,16 +300,46 @@ async function apiFetch(path, options = {}) {
   return response.json();
 }
 
+function applyRoleUI() {
+  const admin = isAdmin();
+
+  $$('[data-tab="settings"]', els.app).forEach((button) => {
+    button.hidden = !admin;
+  });
+
+  if (state.currentUser) {
+    els.currentUserBadge.hidden = false;
+    els.currentUserBadge.textContent = `${state.currentUser.username}（${
+      admin ? '管理者' : '利用者'
+    }）`;
+  } else {
+    els.currentUserBadge.hidden = true;
+  }
+
+  if (!admin && state.activeTab === 'settings') {
+    switchTab('home');
+  }
+}
+
 function showLogin(message = '') {
   if (els.carDialog?.open) els.carDialog.close();
   if (els.memberDialog?.open) els.memberDialog.close();
+  if (els.userDialog?.open) els.userDialog.close();
+  state.currentUser = null;
+  state.users = [];
   els.app.hidden = true;
   els.loginScreen.hidden = false;
   els.boot.hidden = true;
   els.loginError.hidden = !message;
   els.loginError.textContent = message;
   document.title = 'ログイン | 予約アプリ';
-  setTimeout(() => els.password.focus(), 50);
+  setTimeout(() => {
+    if (!els.username.value) {
+      els.username.focus();
+    } else {
+      els.password.focus();
+    }
+  }, 50);
 }
 
 function showApp() {
@@ -260,11 +361,11 @@ function setLoginBusy(isBusy) {
   els.loginSubmit.textContent = isBusy ? 'ログイン中...' : 'ログイン';
 }
 
-async function login(password) {
+async function login(username, password) {
   const response = await fetch(`${API}/auth/login`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ password }),
+    body: JSON.stringify({ username, password }),
   });
 
   const data = await response.json().catch(() => ({}));
@@ -287,6 +388,8 @@ async function logout() {
   state.cars = [];
   state.members = [];
   state.reservations = [];
+  state.users = [];
+  state.currentUser = null;
   switchTab('home');
   showLogin();
   toast('ログアウトしました');
@@ -294,20 +397,23 @@ async function logout() {
 
 async function loadAll() {
   try {
-    const [cars, members, reservations] = await Promise.all([
+    const requests = [
       apiFetch('/cars/'),
       apiFetch('/members/'),
       apiFetch('/reservations/'),
-    ]);
+    ];
+    if (isAdmin()) {
+      requests.push(apiFetch('/users/'));
+    }
+
+    const [cars, members, reservations, users = []] = await Promise.all(requests);
 
     state.cars = cars;
     state.members = members;
     state.reservations = reservations;
+    state.users = users;
 
-    renderSelects();
-    renderHome();
-    renderReservationLists();
-    renderSettings();
+    renderAll();
     saveCachedState();
   } catch (error) {
     if (error.message !== 'unauthorized') {
@@ -322,9 +428,24 @@ async function loadAll() {
   }
 }
 
+function memberOptionMarkup(members, selectedId) {
+  const options = ['<option value="">なし</option>'];
+  members.forEach((member) => {
+    const selected = String(member.id) === String(selectedId) ? ' selected' : '';
+    options.push(
+      `<option value="${member.id}"${selected}>${esc(member.name)}</option>`
+    );
+  });
+  return options.join('');
+}
+
 function renderSelects() {
   const selectedCar = els.reserveCar.value;
   const selectedMember = els.reserveMember.value;
+  const admin = isAdmin();
+  const ownMember = state.members.find(
+    (member) => member.id === state.currentUser?.member_id
+  );
 
   els.reserveCar.innerHTML = state.cars.length
     ? state.cars
@@ -335,26 +456,47 @@ function renderSelects() {
         .join('')
     : '<option value="">車が登録されていません</option>';
 
-  els.reserveMember.innerHTML = state.members.length
-    ? state.members
-        .map((member) => `<option value="${member.id}">${esc(member.name)}</option>`)
-        .join('')
-    : '<option value="">住人が登録されていません</option>';
+  if (admin) {
+    els.reserveMember.disabled = false;
+    els.reserveMember.innerHTML = state.members.length
+      ? state.members
+          .map(
+            (member) => `<option value="${member.id}">${esc(member.name)}</option>`
+          )
+          .join('')
+      : '<option value="">住人が登録されていません</option>';
+  } else if (ownMember) {
+    els.reserveMember.disabled = true;
+    els.reserveMember.innerHTML = `<option value="${ownMember.id}">${esc(
+      ownMember.name
+    )}</option>`;
+  } else {
+    els.reserveMember.disabled = true;
+    els.reserveMember.innerHTML =
+      '<option value="">住人が紐付いていません</option>';
+  }
 
   if (state.cars.some((car) => String(car.id) === selectedCar)) {
     els.reserveCar.value = selectedCar;
   }
-  if (state.members.some((member) => String(member.id) === selectedMember)) {
+  if (
+    admin &&
+    state.members.some((member) => String(member.id) === selectedMember)
+  ) {
     els.reserveMember.value = selectedMember;
   }
 
   const noCars = state.cars.length === 0;
-  const noMembers = state.members.length === 0;
+  const noMembers = admin ? state.members.length === 0 : !ownMember;
   els.reserveSubmit.disabled = noCars || noMembers;
   els.reserveSubmit.textContent = noCars
-    ? '先に車を登録してください'
+    ? admin
+      ? '先に車を登録してください'
+      : '管理者に車の登録を依頼してください'
     : noMembers
-      ? '先に住人を登録してください'
+      ? admin
+        ? '先に住人を登録してください'
+        : '管理者に住人の紐付けを依頼してください'
       : '予約する';
 }
 
@@ -432,10 +574,16 @@ function renderHome() {
     : emptyState('今後の予約はありません');
 }
 
+function canCancelReservation(reservation) {
+  if (!state.currentUser) return false;
+  if (isAdmin()) return true;
+  return reservation.member_id === state.currentUser.member_id;
+}
+
 function reservationCard(reservation, showActions) {
   const isUpcoming = new Date(reservation.end_time).getTime() > Date.now();
   const cancelButton =
-    showActions && isUpcoming
+    showActions && isUpcoming && canCancelReservation(reservation)
       ? `<button class="btn btn-danger btn-small" type="button" data-action="cancel-reservation" data-id="${reservation.id}">キャンセル</button>`
       : '';
 
@@ -460,26 +608,108 @@ function reservationCard(reservation, showActions) {
   `;
 }
 
-function renderReservationLists() {
-  const now = Date.now();
-  const upcoming = state.reservations
-    .filter((reservation) => new Date(reservation.end_time).getTime() >= now)
+function reservationsForDay(date) {
+  const dayStart = startOfDay(date).getTime();
+  const dayEnd = endOfDay(date).getTime();
+  return state.reservations
+    .filter((reservation) => {
+      const start = new Date(reservation.start_time).getTime();
+      const end = new Date(reservation.end_time).getTime();
+      return start < dayEnd && end > dayStart;
+    })
     .sort(
-      (a, b) => new Date(a.start_time).getTime() - new Date(b.start_time).getTime()
+      (a, b) =>
+        new Date(a.start_time).getTime() - new Date(b.start_time).getTime()
     );
+}
+
+function renderCalendar() {
+  els.calendarTitle.textContent = monthFormatter.format(state.calendarCursor);
+
+  const monthStart = startOfMonth(state.calendarCursor);
+  const gridStart = new Date(
+    monthStart.getFullYear(),
+    monthStart.getMonth(),
+    1 - monthStart.getDay()
+  );
+  const today = startOfDay(new Date());
+  const selectedKey = dateKey(state.selectedDate);
+
+  const cells = [];
+  for (let index = 0; index < 42; index += 1) {
+    const date = new Date(
+      gridStart.getFullYear(),
+      gridStart.getMonth(),
+      gridStart.getDate() + index
+    );
+    const key = dateKey(date);
+    const dayReservations = reservationsForDay(date);
+    const outside = date.getMonth() !== state.calendarCursor.getMonth();
+    const classes = ['calendar-day'];
+
+    if (outside) classes.push('is-outside');
+    if (key === selectedKey) classes.push('is-selected');
+    if (key === dateKey(today)) classes.push('is-today');
+    if (dayReservations.length) classes.push('has-reservations');
+
+    const chips = dayReservations.slice(0, 3).map((reservation) => {
+      const start = new Date(reservation.start_time);
+      const dayStart = startOfDay(date);
+      const timeLabel =
+        start < dayStart ? '継続' : timeFormatter.format(start);
+      const own = reservation.member_id === state.currentUser?.member_id;
+      return `<span class="calendar-chip ${own ? 'is-own' : ''}">${esc(
+        timeLabel
+      )} ${esc(reservation.car.name)}</span>`;
+    });
+    if (dayReservations.length > 3) {
+      chips.push(
+        `<span class="calendar-more">+${dayReservations.length - 3}件</span>`
+      );
+    }
+
+    cells.push(`
+      <button class="${classes.join(' ')}" type="button" data-calendar-date="${key}" aria-pressed="${
+        key === selectedKey
+      }">
+        <span class="calendar-day-number">${date.getDate()}</span>
+        <span class="calendar-chips">${chips.join('')}</span>
+      </button>
+    `);
+  }
+
+  els.calendarGrid.innerHTML = cells.join('');
+}
+
+function renderCalendarDay() {
+  const dayReservations = reservationsForDay(state.selectedDate);
+  els.selectedDayTitle.textContent = `${selectedDayFormatter.format(
+    state.selectedDate
+  )}の予約`;
+  els.calendarDayList.innerHTML = dayReservations.length
+    ? dayReservations
+        .map((reservation) => reservationCard(reservation, true))
+        .join('')
+    : emptyState('この日の予約はありません');
+}
+
+function renderPastReservations() {
+  const now = Date.now();
   const past = state.reservations
     .filter((reservation) => new Date(reservation.end_time).getTime() < now)
     .sort(
       (a, b) => new Date(b.start_time).getTime() - new Date(a.start_time).getTime()
     );
 
-  els.upcomingList.innerHTML = upcoming.length
-    ? upcoming.map((reservation) => reservationCard(reservation, true)).join('')
-    : emptyState('今後の予約はありません');
-
   els.pastList.innerHTML = past.length
     ? past.map((reservation) => reservationCard(reservation, false)).join('')
     : emptyState('過去の予約はありません');
+}
+
+function renderReservationLists() {
+  renderCalendar();
+  renderCalendarDay();
+  renderPastReservations();
 }
 
 function renderSettings() {
@@ -532,10 +762,54 @@ function renderSettings() {
         )
         .join('')
     : emptyState('住人が登録されていません');
+
+  const currentUserMember = els.userMember.value;
+  els.userMember.innerHTML = memberOptionMarkup(state.members, currentUserMember);
+  const currentEditMember = els.editUserMember.value;
+  els.editUserMember.innerHTML = memberOptionMarkup(
+    state.members,
+    currentEditMember
+  );
+
+  if (!isAdmin()) {
+    els.userSettingsList.innerHTML = '';
+    return;
+  }
+
+  els.userSettingsList.innerHTML = state.users.length
+    ? state.users
+        .map((user) => {
+          const roleLabel = user.role === 'admin' ? '管理者' : '利用者';
+          const memberLabel = user.member_name
+            ? esc(user.member_name)
+            : '住人の紐付けなし';
+          return `
+            <div class="setting-row">
+              <div class="setting-info">
+                <strong>${esc(user.username)}</strong>
+                <span><span class="role-badge role-badge--${user.role}">${roleLabel}</span> ${memberLabel}</span>
+              </div>
+              <div class="setting-actions">
+                <button class="icon-btn" type="button" data-action="edit-user" data-id="${
+                  user.id
+                }" aria-label="${esc(user.username)}を編集">${editIcon}</button>
+                <button class="icon-btn icon-btn--danger" type="button" data-action="delete-user" data-id="${
+                  user.id
+                }" aria-label="${esc(user.username)}を削除">${trashIcon}</button>
+              </div>
+            </div>
+          `;
+        })
+        .join('')
+    : emptyState('ユーザーが登録されていません');
 }
 
 function switchTab(tab) {
   if (!TAB_TITLES[tab]) return;
+  if (tab === 'settings' && !isAdmin()) {
+    toast('設定は管理者のみ利用できます', true);
+    return;
+  }
 
   state.activeTab = tab;
   $$('.tab-panel').forEach((panel) => {
@@ -550,6 +824,11 @@ function switchTab(tab) {
       button.removeAttribute('aria-current');
     }
   });
+
+  if (tab === 'list') {
+    renderCalendar();
+    renderCalendarDay();
+  }
 
   els.pageTitle.textContent = TAB_TITLES[tab];
   window.scrollTo({ top: 0, behavior: 'smooth' });
@@ -585,6 +864,21 @@ function openMemberDialog(memberId) {
   els.memberDialog.showModal();
 }
 
+function openUserDialog(userId) {
+  const user = state.users.find((item) => item.id === userId);
+  if (!user) return;
+
+  els.editUserId.value = user.id;
+  els.editUserName.value = user.username;
+  els.editUserPassword.value = '';
+  els.editUserRole.value = user.role;
+  els.editUserMember.innerHTML = memberOptionMarkup(
+    state.members,
+    user.member_id ?? ''
+  );
+  els.userDialog.showModal();
+}
+
 async function deleteCar(carId) {
   if (!window.confirm('この車を削除しますか？')) return;
   try {
@@ -601,6 +895,17 @@ async function deleteMember(memberId) {
   try {
     await apiFetch(`/members/${memberId}`, { method: 'DELETE' });
     toast('住人を削除しました');
+    await loadAll();
+  } catch (error) {
+    if (error.message !== 'unauthorized') toast(error.message, true);
+  }
+}
+
+async function deleteUser(userId) {
+  if (!window.confirm('このユーザーを削除しますか？')) return;
+  try {
+    await apiFetch(`/users/${userId}`, { method: 'DELETE' });
+    toast('ユーザーを削除しました');
     await loadAll();
   } catch (error) {
     if (error.message !== 'unauthorized') toast(error.message, true);
@@ -632,6 +937,12 @@ async function handleAction(action, id) {
     case 'delete-member':
       await deleteMember(id);
       break;
+    case 'edit-user':
+      openUserDialog(id);
+      break;
+    case 'delete-user':
+      await deleteUser(id);
+      break;
     case 'cancel-reservation':
       await cancelReservation(id);
       break;
@@ -640,20 +951,52 @@ async function handleAction(action, id) {
   }
 }
 
+function selectCalendarDate(date) {
+  state.selectedDate = startOfDay(date);
+  state.calendarCursor = startOfMonth(date);
+  renderCalendar();
+  renderCalendarDay();
+}
+
+function moveCalendar(months) {
+  state.calendarCursor = new Date(
+    state.calendarCursor.getFullYear(),
+    state.calendarCursor.getMonth() + months,
+    1
+  );
+  if (
+    state.selectedDate.getFullYear() !== state.calendarCursor.getFullYear() ||
+    state.selectedDate.getMonth() !== state.calendarCursor.getMonth()
+  ) {
+    state.selectedDate = startOfMonth(state.calendarCursor);
+  }
+  renderCalendar();
+  renderCalendarDay();
+}
+
 function bindEvents() {
   els.loginForm.addEventListener('submit', async (event) => {
     event.preventDefault();
+    const username = els.username.value.trim();
     const password = els.password.value;
+    if (!username) {
+      showLoginError('ユーザー名を入力してください');
+      els.username.focus();
+      return;
+    }
     if (!password) {
       showLoginError('パスワードを入力してください');
+      els.password.focus();
       return;
     }
 
     setLoginBusy(true);
     els.loginError.hidden = true;
     try {
-      await login(password);
+      const data = await login(username, password);
+      state.currentUser = data.user;
       showApp();
+      applyRoleUI();
       setDefaultTimes();
       await loadAll();
     } catch (error) {
@@ -668,6 +1011,16 @@ function bindEvents() {
 
   $('#logoutBtn').addEventListener('click', logout);
   $('#logoutBtnMobile').addEventListener('click', logout);
+
+  els.calendarPrev.addEventListener('click', () => moveCalendar(-1));
+  els.calendarNext.addEventListener('click', () => moveCalendar(1));
+  els.calendarToday.addEventListener('click', () => selectCalendarDate(new Date()));
+
+  els.calendarGrid.addEventListener('click', (event) => {
+    const dayButton = event.target.closest('[data-calendar-date]');
+    if (!dayButton) return;
+    selectCalendarDate(parseDateKey(dayButton.dataset.calendarDate));
+  });
 
   els.reservationForm.addEventListener('submit', async (event) => {
     event.preventDefault();
@@ -685,6 +1038,7 @@ function bindEvents() {
       return;
     }
 
+    const start = new Date(els.startTime.value);
     const payload = {
       car_id: Number(els.reserveCar.value),
       member_id: Number(els.reserveMember.value),
@@ -702,6 +1056,8 @@ function bindEvents() {
       });
       els.note.value = '';
       setDefaultTimes();
+      state.calendarCursor = startOfMonth(start);
+      state.selectedDate = startOfDay(start);
       toast('予約しました');
       await loadAll();
       switchTab('list');
@@ -758,6 +1114,32 @@ function bindEvents() {
     }
   });
 
+  els.userForm.addEventListener('submit', async (event) => {
+    event.preventDefault();
+    if (els.userRole.value === 'user' && !els.userMember.value) {
+      toast('利用者には住人を紐付けてください', true);
+      return;
+    }
+    try {
+      await apiFetch('/users/', {
+        method: 'POST',
+        body: JSON.stringify({
+          username: els.userName.value.trim(),
+          password: els.userPassword.value,
+          role: els.userRole.value,
+          member_id: els.userMember.value
+            ? Number(els.userMember.value)
+            : null,
+        }),
+      });
+      els.userForm.reset();
+      toast('ユーザーを追加しました');
+      await loadAll();
+    } catch (error) {
+      if (error.message !== 'unauthorized') toast(error.message, true);
+    }
+  });
+
   els.carEditForm.addEventListener('submit', async (event) => {
     event.preventDefault();
     const carId = Number(els.editCarId.value);
@@ -794,6 +1176,37 @@ function bindEvents() {
     }
   });
 
+  els.userEditForm.addEventListener('submit', async (event) => {
+    event.preventDefault();
+    if (els.editUserRole.value === 'user' && !els.editUserMember.value) {
+      toast('利用者には住人を紐付けてください', true);
+      return;
+    }
+    const userId = Number(els.editUserId.value);
+    const payload = {
+      username: els.editUserName.value.trim(),
+      role: els.editUserRole.value,
+      member_id: els.editUserMember.value
+        ? Number(els.editUserMember.value)
+        : null,
+    };
+    if (els.editUserPassword.value) {
+      payload.password = els.editUserPassword.value;
+    }
+
+    try {
+      await apiFetch(`/users/${userId}`, {
+        method: 'PUT',
+        body: JSON.stringify(payload),
+      });
+      els.userDialog.close();
+      toast('ユーザーを更新しました');
+      await loadAll();
+    } catch (error) {
+      if (error.message !== 'unauthorized') toast(error.message, true);
+    }
+  });
+
   document.addEventListener('click', (event) => {
     const tabButton = event.target.closest('[data-tab]');
     if (tabButton) {
@@ -819,7 +1232,7 @@ function bindEvents() {
     }
   });
 
-  [els.carDialog, els.memberDialog].forEach((dialog) => {
+  [els.carDialog, els.memberDialog, els.userDialog].forEach((dialog) => {
     dialog.addEventListener('click', (event) => {
       if (event.target === dialog) dialog.close();
     });
@@ -847,7 +1260,10 @@ async function init() {
   try {
     const response = await fetch(`${API}/auth/me`);
     if (response.ok) {
+      const data = await response.json();
+      state.currentUser = data.user;
       showApp();
+      applyRoleUI();
       setDefaultTimes();
       await loadAll();
     } else {

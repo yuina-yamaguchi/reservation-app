@@ -1,5 +1,6 @@
 import re
 from datetime import datetime
+from typing import Literal
 
 from pydantic import BaseModel, Field, field_validator, model_validator
 
@@ -56,6 +57,52 @@ class MemberResponse(MemberBase):
     id: int
 
     model_config = {"from_attributes": True}
+
+
+# ── ユーザー ──────────────────────────────────────
+
+
+class UserBase(BaseModel):
+    username: str = Field(min_length=1, max_length=50)
+    role: Literal["admin", "user"] = "user"
+    member_id: int | None = None
+
+    @field_validator("username")
+    @classmethod
+    def normalize_username(cls, value: str) -> str:
+        value = value.strip()
+        if not value:
+            raise ValueError("入力してください")
+        return value
+
+
+class UserCreate(UserBase):
+    password: str = Field(min_length=8, max_length=128)
+
+
+class UserUpdate(BaseModel):
+    username: str | None = Field(default=None, min_length=1, max_length=50)
+    password: str | None = Field(default=None, min_length=8, max_length=128)
+    role: Literal["admin", "user"] | None = None
+    member_id: int | None = None
+
+    @field_validator("username")
+    @classmethod
+    def normalize_username(cls, value: str | None) -> str | None:
+        if value is None:
+            return value
+        value = value.strip()
+        if not value:
+            raise ValueError("入力してください")
+        return value
+
+
+class UserResponse(BaseModel):
+    id: int
+    username: str
+    role: Literal["admin", "user"]
+    member_id: int | None
+    member_name: str | None = None
 
 
 # ── 予約 ──────────────────────────────────────────

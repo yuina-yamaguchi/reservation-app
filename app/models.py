@@ -24,6 +24,18 @@ class Member(Base):
     reservations = relationship("Reservation", back_populates="member")
 
 
+class User(Base):
+    __tablename__ = "users"
+
+    id = Column(Integer, primary_key=True, index=True)
+    username = Column(String(50), nullable=False, unique=True, index=True)
+    password_hash = Column(String(255), nullable=False)
+    role = Column(String(20), nullable=False, default="user")
+    member_id = Column(Integer, ForeignKey("members.id"), nullable=True)
+
+    member = relationship("Member")
+
+
 class Reservation(Base):
     __tablename__ = "reservations"
     __table_args__ = (

@@ -17,6 +17,7 @@ def _env_bool(name: str, default: bool = False) -> bool:
 @dataclass(frozen=True)
 class Settings:
     app_password: str
+    admin_username: str
     session_secret: str
     cookie_name: str
     cookie_secure: bool
@@ -41,6 +42,9 @@ def get_settings() -> Settings:
 
     return Settings(
         app_password=app_password,
+        admin_username=(
+            os.getenv("ADMIN_USERNAME", "admin").strip() or "admin"
+        ),
         session_secret=session_secret,
         cookie_name=(
             os.getenv("COOKIE_NAME", "reservation_session").strip()

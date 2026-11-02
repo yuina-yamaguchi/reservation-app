@@ -2,6 +2,7 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 
 from .. import models, schemas
+from ..auth import require_admin
 from ..database import get_db
 
 router = APIRouter(prefix="/cars", tags=["車"])
@@ -21,7 +22,10 @@ def get_car(car_id: int, db: Session = Depends(get_db)):
 
 
 @router.post(
-    "/", response_model=schemas.CarResponse, status_code=status.HTTP_201_CREATED
+    "/",
+    response_model=schemas.CarResponse,
+    status_code=status.HTTP_201_CREATED,
+    dependencies=[Depends(require_admin)],
 )
 def create_car(car: schemas.CarCreate, db: Session = Depends(get_db)):
     db_car = models.Car(**car.model_dump())
@@ -31,7 +35,11 @@ def create_car(car: schemas.CarCreate, db: Session = Depends(get_db)):
     return db_car
 
 
-@router.put("/{car_id}", response_model=schemas.CarResponse)
+@router.put(
+    "/{car_id}",
+    response_model=schemas.CarResponse,
+    dependencies=[Depends(require_admin)],
+)
 def update_car(
     car_id: int, car: schemas.CarCreate, db: Session = Depends(get_db)
 ):
@@ -47,7 +55,11 @@ def update_car(
     return db_car
 
 
-@router.delete("/{car_id}", status_code=status.HTTP_204_NO_CONTENT)
+@router.delete(
+    "/{car_id}",
+    status_code=status.HTTP_204_NO_CONTENT,
+    dependencies=[Depends(require_admin)],
+)
 def delete_car(car_id: int, db: Session = Depends(get_db)):
     car = db.query(models.Car).filter(models.Car.id == car_id).first()
     if not car:

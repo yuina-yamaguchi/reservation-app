@@ -72,7 +72,10 @@
       <h1>予約アプリ</h1>
       <p class="login-lead">学生マンションの住人で車を共有するための予約管理</p>
       <form id="loginForm" class="stack" novalidate>
-        <input type="text" name="username" autocomplete="username" value="family" hidden>
+        <div class="field">
+          <label for="username">ユーザー名</label>
+          <input id="username" name="username" type="text" autocomplete="username" placeholder="ユーザー名を入力" required>
+        </div>
         <div class="field">
           <label for="password">パスワード</label>
           <input id="password" name="password" type="password" autocomplete="current-password" placeholder="パスワードを入力" required>
@@ -80,7 +83,7 @@
         <button id="loginSubmit" class="btn btn-primary btn-block" type="submit">ログイン</button>
         <p id="loginError" class="form-error" role="alert" hidden></p>
       </form>
-      <p class="login-note">パスワードは管理者から共有されたものを入力してください。</p>
+      <p class="login-note">管理者から共有されたユーザー名とパスワードを入力してください。</p>
     </div>
   </section>
 
@@ -122,9 +125,12 @@
           <p class="eyebrow" id="todayLabel"></p>
           <h1 id="pageTitle">ホーム</h1>
         </div>
-        <button id="logoutBtnMobile" class="icon-btn" type="button" aria-label="ログアウト">
-          <svg class="icon"><use href="#icon-logout"></use></svg>
-        </button>
+        <div class="topbar-actions">
+          <span id="currentUserBadge" class="user-badge" hidden></span>
+          <button id="logoutBtnMobile" class="icon-btn" type="button" aria-label="ログアウト">
+            <svg class="icon"><use href="#icon-logout"></use></svg>
+          </button>
+        </div>
       </header>
 
       <main class="content">
@@ -171,10 +177,31 @@
         </section>
 
         <section id="panel-list" class="tab-panel" hidden>
-          <div class="section-head">
-            <h2>今後の予約</h2>
+          <div class="card calendar-card">
+            <div class="calendar-toolbar">
+              <h2 id="calendarTitle"></h2>
+              <div class="calendar-nav">
+                <button id="calendarPrev" class="icon-btn" type="button" aria-label="前の月">‹</button>
+                <button id="calendarToday" class="btn btn-ghost btn-small" type="button">今日</button>
+                <button id="calendarNext" class="icon-btn" type="button" aria-label="次の月">›</button>
+              </div>
+            </div>
+            <div class="calendar-weekdays" aria-hidden="true">
+              <span>日</span>
+              <span>月</span>
+              <span>火</span>
+              <span>水</span>
+              <span>木</span>
+              <span>金</span>
+              <span>土</span>
+            </div>
+            <div id="calendarGrid" class="calendar-grid" role="grid" aria-label="予約カレンダー"></div>
           </div>
-          <div id="upcomingList" class="stack"></div>
+
+          <div class="section-head section-head--spaced">
+            <h2 id="selectedDayTitle">選択した日の予約</h2>
+          </div>
+          <div id="calendarDayList" class="stack"></div>
 
           <div class="section-head section-head--spaced">
             <h2>過去の予約</h2>
@@ -220,6 +247,40 @@
                   <label for="memberName">名字</label>
                   <input id="memberName" name="name" type="text" maxlength="100" placeholder="例：山田" required>
                   <p class="form-hint">部屋番号は個人情報保護のため登録できません。</p>
+                </div>
+                <button class="btn btn-primary" type="submit">追加する</button>
+              </form>
+            </div>
+
+            <div class="card">
+              <div class="section-head">
+                <h2>ユーザー</h2>
+              </div>
+              <div id="userSettingsList" class="stack"></div>
+
+              <form id="userForm" class="stack form-inline">
+                <h3>ユーザーを追加</h3>
+                <div class="field">
+                  <label for="userName">ユーザー名</label>
+                  <input id="userName" name="username" type="text" maxlength="50" autocomplete="off" placeholder="例：yamada" required>
+                </div>
+                <div class="field">
+                  <label for="userPassword">パスワード</label>
+                  <input id="userPassword" name="password" type="password" minlength="8" maxlength="128" autocomplete="new-password" placeholder="8文字以上" required>
+                </div>
+                <div class="field">
+                  <label for="userRole">権限</label>
+                  <select id="userRole" name="role">
+                    <option value="user">利用者</option>
+                    <option value="admin">管理者</option>
+                  </select>
+                </div>
+                <div class="field">
+                  <label for="userMember">紐付ける住人</label>
+                  <select id="userMember" name="member_id">
+                    <option value="">なし</option>
+                  </select>
+                  <p class="form-hint">利用者の場合、この住人として予約します。</p>
                 </div>
                 <button class="btn btn-primary" type="submit">追加する</button>
               </form>
@@ -280,6 +341,38 @@
       </div>
       <div class="dialog-actions">
         <button type="button" class="btn btn-ghost" data-close-dialog="memberDialog">キャンセル</button>
+        <button type="submit" class="btn btn-primary">保存</button>
+      </div>
+    </form>
+  </dialog>
+
+  <dialog id="userDialog" class="dialog">
+    <form id="userEditForm" class="stack">
+      <h2>ユーザーを編集</h2>
+      <input type="hidden" id="editUserId">
+      <div class="field">
+        <label for="editUserName">ユーザー名</label>
+        <input id="editUserName" type="text" maxlength="50" autocomplete="off" required>
+      </div>
+      <div class="field">
+        <label for="editUserPassword">新しいパスワード</label>
+        <input id="editUserPassword" type="password" minlength="8" maxlength="128" autocomplete="new-password" placeholder="変更しない場合は空欄">
+      </div>
+      <div class="field">
+        <label for="editUserRole">権限</label>
+        <select id="editUserRole">
+          <option value="user">利用者</option>
+          <option value="admin">管理者</option>
+        </select>
+      </div>
+      <div class="field">
+        <label for="editUserMember">紐付ける住人</label>
+        <select id="editUserMember">
+          <option value="">なし</option>
+        </select>
+      </div>
+      <div class="dialog-actions">
+        <button type="button" class="btn btn-ghost" data-close-dialog="userDialog">キャンセル</button>
         <button type="submit" class="btn btn-primary">保存</button>
       </div>
     </form>

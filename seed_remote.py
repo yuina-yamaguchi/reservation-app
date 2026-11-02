@@ -2,6 +2,7 @@
 
 使い方:
   $env:APP_URL = "https://your-app.fastapicloud.dev"
+  $env:ADMIN_USERNAME = "admin"
   $env:APP_PASSWORD = "本番のパスワード"
   python seed_remote.py
 
@@ -47,6 +48,7 @@ def main() -> None:
         sys.exit(1)
 
     base_url = base_url.rstrip("/")
+    username = os.getenv("ADMIN_USERNAME", "admin")
     password = os.getenv("APP_PASSWORD", "")
     if not password:
         password = getpass.getpass("APP_PASSWORD: ")
@@ -59,7 +61,10 @@ def main() -> None:
         headers={"User-Agent": USER_AGENT},
     ) as client:
         login = _request(
-            client, "POST", "/api/auth/login", json={"password": password}
+            client,
+            "POST",
+            "/api/auth/login",
+            json={"username": username, "password": password},
         )
         if login.status_code != 200:
             print(f"ログインに失敗しました（{login.status_code}）: {login.text}")

@@ -2,6 +2,7 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 
 from .. import models, schemas
+from ..auth import require_admin
 from ..database import get_db
 
 router = APIRouter(prefix="/members", tags=["住人"])
@@ -21,7 +22,10 @@ def get_member(member_id: int, db: Session = Depends(get_db)):
 
 
 @router.post(
-    "/", response_model=schemas.MemberResponse, status_code=status.HTTP_201_CREATED
+    "/",
+    response_model=schemas.MemberResponse,
+    status_code=status.HTTP_201_CREATED,
+    dependencies=[Depends(require_admin)],
 )
 def create_member(member: schemas.MemberCreate, db: Session = Depends(get_db)):
     db_member = models.Member(**member.model_dump())
@@ -31,7 +35,11 @@ def create_member(member: schemas.MemberCreate, db: Session = Depends(get_db)):
     return db_member
 
 
-@router.put("/{member_id}", response_model=schemas.MemberResponse)
+@router.put(
+    "/{member_id}",
+    response_model=schemas.MemberResponse,
+    dependencies=[Depends(require_admin)],
+)
 def update_member(
     member_id: int, member: schemas.MemberCreate, db: Session = Depends(get_db)
 ):
@@ -49,7 +57,11 @@ def update_member(
     return db_member
 
 
-@router.delete("/{member_id}", status_code=status.HTTP_204_NO_CONTENT)
+@router.delete(
+    "/{member_id}",
+    status_code=status.HTTP_204_NO_CONTENT,
+    dependencies=[Depends(require_admin)],
+)
 def delete_member(member_id: int, db: Session = Depends(get_db)):
     member = db.query(models.Member).filter(models.Member.id == member_id).first()
     if not member:
@@ -64,6 +76,17 @@ def delete_member(member_id: int, db: Session = Depends(get_db)):
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
             detail="この住人には予約があるため削除できません。先に予約をキャンセルしてください。",
+        )
+
+    has_user = (
+        db.query(models.User.id)
+        .filter(models.User.member_id == member_id)
+        .first()
+    )
+    if has_user:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="この住人にはユーザーが紐付いているため削除できません。先にユーザーの紐付けを解除してください。",
         )
 
     db.delete(member)
