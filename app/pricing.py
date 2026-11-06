@@ -142,7 +142,9 @@ def period_expiry(period: str) -> datetime:
 
 
 def booking_window_days(payment_type: str) -> int:
-    return TICKET_BOOKING_DAYS if payment_type == "ticket" else TIME_BOOKING_DAYS
+    if payment_type in ("ticket", "ticket_2", "ticket_overflow"):
+        return TICKET_BOOKING_DAYS
+    return TIME_BOOKING_DAYS
 
 
 def days_ahead(start: datetime, now: datetime | None = None) -> int:
@@ -218,6 +220,86 @@ def ticket_option(hours: int, ticket) -> dict:
         "ticket_value": value,
         "ticket_expires_at": ticket.expires_at,
     }
+
+
+def reservation_payment_options(
+    hours: int,
+    plan: Plan,
+    available_tickets: list,
+    ticket_allowed: bool,
+    time_allowed: bool,
+) -> list[dict]:
+    opts: list[dict] = []
+    if hours <= TICKET_HOURS:
+        if ticket_allowed and available_tickets:
+            opts.append(ticket_option(hours, available_tickets[0]))
+        if time_allowed:
+            opts.append(time_option(hours, plan.code))
+        return opts
+    # hours > 6
+    if plan.code == PLAN_NONE:
+        if time_allowed:
+            opts.append(time_option(hours, plan.code))
+        return opts
+    # light / standard: 3 options
+    if len(available_tickets) >= 2:
+        t1, t2 = available_tickets[0], available_tickets[1]
+        v1 = t1.price or plan.ticket_value
+        v2 = t2.price or plan.ticket_value
+        opts.append(
+            {
+                "type": "ticket_2",
+                "label": "6時間券2枚分で予約（追加課金なし）",
+                "hours": hours,
+                "total": 0,
+                "vehicle_value": v1 + v2,
+                "incremental_amount": 0,
+                "overflow_amount": 0,
+                "ticket_id": t1.id,
+                "ticket_source": t1.source,
+                "ticket_value": v1,
+                "ticket_expires_at": t1.expires_at,
+                "ticket_2_id": t2.id,
+                "ticket_2_source": t2.source,
+                "ticket_2_value": v2,
+            }
+        )
+    if ticket_allowed and available_tickets:
+        t = available_tickets[0]
+        v = t.price or plan.ticket_value
+        ov = overflow_amount(hours)
+        opts.append(
+            {
+                "type": "ticket_overflow",
+                "label": "6時間券＋超過分時間料金（上限2,400円）",
+                "hours": hours,
+                "total": ov,
+                "vehicle_value": v + ov,
+                "incremental_amount": ov,
+                "overflow_amount": ov,
+                "ticket_id": t.id,
+                "ticket_source": t.source,
+                "ticket_value": v,
+                "ticket_expires_at": t.expires_at,
+            }
+        )
+    if time_allowed:
+        opts.append(
+            {
+                "type": "time_all",
+                "label": f"すべて時間料金（1時間{plan.hourly_rate}円）",
+                "hours": hours,
+                "total": plan.hourly_rate * hours,
+                "vehicle_value": plan.hourly_rate * hours,
+                "incremental_amount": plan.hourly_rate * hours,
+                "overflow_amount": 0,
+                "ticket_id": None,
+                "ticket_source": None,
+                "ticket_value": None,
+                "ticket_expires_at": None,
+            }
+        )
+    return opts
 
 
 def carpool_seat_fee(area: str) -> int:

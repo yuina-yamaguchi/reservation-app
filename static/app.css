@@ -1375,3 +1375,134 @@ select:focus {
     transition-duration: 0.01ms !important;
   }
 }
+
+/* ── 予約詳細モーダル ── */
+.reservation-modal {
+  max-width: 640px;
+  width: 92vw;
+  max-height: 90vh;
+  overflow: hidden;
+}
+
+.reservation-modal .dialog-actions {
+  justify-content: flex-end;
+  gap: 10px;
+  padding-top: 12px;
+  border-top: 1px solid var(--line);
+  margin-top: 16px;
+}
+
+.modal-reservation-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  max-height: 60vh;
+  overflow-y: auto;
+  padding-right: 4px;
+}
+
+.modal-reservation-list::-webkit-scrollbar {
+  width: 6px;
+}
+
+.modal-reservation-list::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.modal-reservation-list::-webkit-scrollbar-thumb {
+  background: var(--line);
+  border-radius: 3px;
+}
+
+.reservation-detail-card {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 12px 16px;
+  padding: 14px 16px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--card);
+  cursor: pointer;
+  transition: background 0.15s, border-color 0.15s;
+}
+
+.reservation-detail-card:hover {
+  background: var(--hover);
+  border-color: var(--green-200);
+}
+
+.reservation-detail-card.is-own {
+  border-left: 4px solid var(--green-500);
+}
+
+.reservation-detail-card.is-other {
+  border-left: 4px solid var(--line);
+}
+
+.reservation-detail-main {
+  min-width: 0;
+}
+
+.reservation-detail-title {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  font-weight: 700;
+  margin-bottom: 4px;
+}
+
+.reservation-detail-time {
+  color: var(--muted);
+  font-size: 0.84rem;
+  margin-bottom: 4px;
+}
+
+.reservation-detail-meta {
+  font-size: 0.8rem;
+  color: var(--muted);
+  margin-bottom: 2px;
+}
+
+.reservation-detail-note {
+  font-size: 0.84rem;
+  color: var(--text);
+  overflow-wrap: anywhere;
+  margin-top: 4px;
+}
+
+.reservation-detail-note.public {
+  color: var(--green-700);
+}
+
+.reservation-detail-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  align-items: flex-end;
+}
+
+.carpool-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: #fef3c7;
+  color: #92400e;
+  font-size: 0.72rem;
+  font-weight: 700;
+  margin-left: auto;
+}
+
+.cancel-detail-btn {
+  width: 100%;
+}
+
+/* 元の予約カードもクリック可能に */
+.reservation-card {
+  cursor: pointer;
+}
+
+.reservation-card:hover {
+  background: var(--hover);
+}

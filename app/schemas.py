@@ -1,6 +1,6 @@
 import re
 from datetime import datetime
-from typing import Literal
+from typing import Any, Literal
 
 from pydantic import BaseModel, Field, field_validator, model_validator
 
@@ -231,7 +231,7 @@ class ReservationCreate(BaseModel):
     end_time: datetime
     note: str = Field(default="", max_length=500)
     note_public: bool = False
-    payment_type: Literal["ticket", "time"] = "time"
+    payment_type: Literal["ticket", "time", "ticket_2"] = "time"
     ticket_user_id: int | None = None
 
     @field_validator("note")
@@ -258,6 +258,7 @@ class ReservationResponse(BaseModel):
     member: MemberResponse
     charge: ChargeResponse | None = None
     digital_key: "DigitalKeyResponse | None" = None
+    ride_share: Any | None = None
 
     model_config = {"from_attributes": True}
 

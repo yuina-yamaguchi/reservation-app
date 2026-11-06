@@ -61,6 +61,57 @@ SCHEMA_ADDITIONS = (
 )
 
 
+def _widen_payment_type_column() -> None:
+    """reservation_charges.payment_type を VARCHAR(20) に拡張（SQLite 再構築）。"""
+    inspector = inspect(engine)
+    tables = set(inspector.get_table_names())
+    if "reservation_charges" not in tables:
+        return
+    with engine.begin() as connection:
+        connection.execute(
+            text(
+                """
+                CREATE TABLE IF NOT EXISTS reservation_charges_new (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    reservation_id INTEGER UNIQUE REFERENCES reservations(id),
+                    car_id INTEGER NOT NULL REFERENCES cars(id),
+                    ticket_user_id INTEGER REFERENCES users(id),
+                    ticket_id INTEGER REFERENCES time_tickets(id),
+                    payment_type VARCHAR(20) NOT NULL DEFAULT 'time',
+                    duration_minutes INTEGER NOT NULL DEFAULT 0,
+                    vehicle_value INTEGER NOT NULL DEFAULT 0,
+                    incremental_amount INTEGER NOT NULL DEFAULT 0,
+                    overflow_amount INTEGER NOT NULL DEFAULT 0,
+                    seat_fee_total INTEGER NOT NULL DEFAULT 0,
+                    discount_applied INTEGER NOT NULL DEFAULT 0,
+                    status VARCHAR(20) NOT NULL DEFAULT 'active',
+                    reservation_start DATETIME,
+                    reservation_end DATETIME,
+                    snapshot TEXT NOT NULL DEFAULT '',
+                    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+                )
+                """
+            )
+        )
+        connection.execute(
+            text(
+                """
+                INSERT OR IGNORE INTO reservation_charges_new
+                SELECT id, reservation_id, car_id, ticket_user_id, ticket_id,
+                       payment_type, duration_minutes, vehicle_value,
+                       incremental_amount, overflow_amount, seat_fee_total,
+                       discount_applied, status, reservation_start,
+                       reservation_end, snapshot, created_at
+                FROM reservation_charges
+                """
+            )
+        )
+        connection.execute(text("DROP TABLE reservation_charges"))
+        connection.execute(
+            text("ALTER TABLE reservation_charges_new RENAME TO reservation_charges")
+        )
+
+
 def apply_schema_upgrades() -> None:
     """既存テーブルに後から追加した列を作成する。"""
     inspector = inspect(engine)
@@ -75,6 +126,7 @@ def apply_schema_upgrades() -> None:
             connection.execute(
                 text(f"ALTER TABLE {table} ADD COLUMN {column} {definition}")
             )
+    _widen_payment_type_column()
 
 
 def get_db():

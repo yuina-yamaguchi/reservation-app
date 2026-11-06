@@ -34,6 +34,7 @@ def _with_relations(db: Session):
         joinedload(models.Reservation.car),
         joinedload(models.Reservation.member),
         joinedload(models.Reservation.charge),
+        joinedload(models.Reservation.ride_share),
     )
 
 
@@ -54,6 +55,28 @@ def reservation_to_response(
     data = schemas.ReservationResponse.model_validate(reservation).model_dump()
     if not can_view_reservation_note(reservation, current_user):
         data["note"] = ""
+
+    charge = data.get("charge")
+    if charge:
+        is_owner = current_user.role == "admin" or charge.get("ticket_user_id") == current_user.id
+        if not is_owner:
+            charge["payment_type"] = ""
+            charge["vehicle_value"] = 0
+            charge["incremental_amount"] = 0
+            charge["overflow_amount"] = 0
+            charge["seat_fee_total"] = 0
+            charge["discount_applied"] = 0
+            charge["actual_burden"] = 0
+
+    ride_share = reservation.ride_share
+    data["ride_share"] = (
+        {
+            "status": ride_share.status,
+            "driver_user_id": ride_share.driver_user_id,
+        }
+        if ride_share
+        else None
+    )
     return data
 
 
@@ -146,7 +169,23 @@ def _build_options(
     else:
         days = pricing.days_ahead(start, now)
         ticket = ticket_service.find_available_ticket(db, ticket_user.id, start)
-        ticket_allowed = ticket is not None and (
+        available_tickets: list[models.TimeTicket] = []
+        if ticket:
+            available_tickets.append(ticket)
+            second = (
+                db.query(models.TimeTicket)
+                .filter(
+                    models.TimeTicket.user_id == ticket_user.id,
+                    models.TimeTicket.status == "available",
+                    models.TimeTicket.expires_at >= start,
+                    models.TimeTicket.id != ticket.id,
+                )
+                .order_by(models.TimeTicket.expires_at, models.TimeTicket.id)
+                .first()
+            )
+            if second:
+                available_tickets.append(second)
+        ticket_allowed = bool(available_tickets) and (
             current_user.role == "admin" or days <= pricing.TICKET_BOOKING_DAYS
         )
         time_allowed = (
@@ -165,10 +204,11 @@ def _build_options(
                 "この日付は6時間券が必要です（時間券は14日前から予約できます）"
             )
         else:
-            if time_allowed:
-                options.append(pricing.time_option(hours, ticket_user.plan))
-            if ticket_allowed:
-                options.append(pricing.ticket_option(hours, ticket))
+            options.extend(
+                pricing.reservation_payment_options(
+                    hours, plan, available_tickets, ticket_allowed, time_allowed
+                )
+            )
 
     return {
         "car_available": conflict is None,
@@ -271,7 +311,8 @@ def create_reservation(
         )
 
     ticket = None
-    if reservation.payment_type == "ticket":
+    ticket_2 = None
+    if reservation.payment_type in ("ticket", "ticket_overflow"):
         ticket_id = selected.get("ticket_id")
         ticket = (
             db.query(models.TimeTicket)
@@ -282,6 +323,29 @@ def create_reservation(
             raise HTTPException(
                 status_code=status.HTTP_409_CONFLICT,
                 detail="6時間券の空きがありません。もう一度選択してください。",
+            )
+    elif reservation.payment_type == "ticket_2":
+        ticket_id = selected.get("ticket_id")
+        ticket = (
+            db.query(models.TimeTicket)
+            .filter(models.TimeTicket.id == ticket_id)
+            .first()
+        )
+        ticket_2_id = selected.get("ticket_2_id")
+        ticket_2 = (
+            db.query(models.TimeTicket)
+            .filter(models.TimeTicket.id == ticket_2_id)
+            .first()
+        )
+        if not ticket or ticket.status != "available":
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail="6時間券の空きがありません。もう一度選択してください。",
+            )
+        if not ticket_2 or ticket_2.status != "available":
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail="2枚目の6時間券の空きがありません。もう一度選択してください。",
             )
 
     data = reservation.model_dump()
@@ -294,6 +358,17 @@ def create_reservation(
 
     if ticket is not None:
         ticket_service.reserve_ticket(ticket, db_reservation.id)
+    if ticket_2 is not None:
+        ticket_service.reserve_ticket(ticket_2, db_reservation.id)
+
+    snapshot_data = {
+        "plan": options["plan"],
+        "ticket_source": selected.get("ticket_source"),
+        "ticket_value": selected.get("ticket_value"),
+    }
+    if reservation.payment_type == "ticket_2":
+        snapshot_data["ticket_2_source"] = selected.get("ticket_2_source")
+        snapshot_data["ticket_2_value"] = selected.get("ticket_2_value")
 
     charge = models.ReservationCharge(
         reservation_id=db_reservation.id,
@@ -307,14 +382,7 @@ def create_reservation(
         overflow_amount=selected["overflow_amount"],
         reservation_start=db_reservation.start_time,
         reservation_end=db_reservation.end_time,
-        snapshot=json.dumps(
-            {
-                "plan": options["plan"],
-                "ticket_source": selected.get("ticket_source"),
-                "ticket_value": selected.get("ticket_value"),
-            },
-            ensure_ascii=False,
-        ),
+        snapshot=json.dumps(snapshot_data, ensure_ascii=False),
     )
     db.add(charge)
 
@@ -368,9 +436,39 @@ def delete_reservation(
                 ticket_service.consume_ticket(ticket)
             ticket.reservation_id = None
 
+    # ticket_2 の2枚目チケットも解放/消費
+    if charge and charge.payment_type == "ticket_2" and charge.snapshot:
+        try:
+            snapshot = json.loads(charge.snapshot)
+            ticket_2_id = snapshot.get("ticket_2_id")
+            if ticket_2_id:
+                ticket_2 = (
+                    db.query(models.TimeTicket)
+                    .filter(models.TimeTicket.id == ticket_2_id)
+                    .first()
+                )
+                if ticket_2:
+                    if current_user.role == "admin" or pricing.can_return_ticket(
+                        reservation.start_time, now
+                    ):
+                        ticket_service.release_ticket(ticket_2)
+                    else:
+                        ticket_service.consume_ticket(ticket_2)
+                    ticket_2.reservation_id = None
+        except (json.JSONDecodeError, AttributeError):
+            pass
+
     if charge:
         charge.status = "cancelled"
         charge.reservation_id = None
+        # 相乗り承認済み予約を運転者がキャンセルした旨を記録
+        if reservation.ride_share:
+            try:
+                snapshot = json.loads(charge.snapshot) if charge.snapshot else {}
+            except (json.JSONDecodeError, AttributeError):
+                snapshot = {}
+            snapshot["cancelled_by_driver"] = True
+            charge.snapshot = json.dumps(snapshot, ensure_ascii=False)
 
     key_service.revoke_reservation_keys(db, reservation, current_user, request)
 

@@ -107,6 +107,9 @@ const els = {
   carpoolList: $('#carpoolList'),
   carpoolDialog: $('#carpoolDialog'),
   openCarpoolDialogBtn: $('#openCarpoolDialog'),
+  reservationDayModal: $('#reservationDayModal'),
+  modalDateTitle: $('#modalDateTitle'),
+  modalReservations: $('#modalReservations'),
   keyDeviceList: $('#keyDeviceList'),
   keyDeviceForm: $('#keyDeviceForm'),
   keyDeviceCar: $('#keyDeviceCar'),
@@ -760,9 +763,13 @@ function reservationCard(reservation, showActions) {
       : '';
 
   const charge = reservation.charge;
-  const chargeLine = charge
+  const chargeLine = charge && charge.payment_type
     ? `<div class="reservation-meta">${
-        charge.payment_type === 'ticket' ? '6時間券' : '時間券'
+        charge.payment_type === 'ticket' ? '6時間券' :
+        charge.payment_type === 'ticket_2' ? '6時間券×2' :
+        charge.payment_type === 'ticket_overflow' ? '6時間券＋超過' :
+        charge.payment_type === 'time_all' ? '時間料金' :
+        '時間券'
       } / 今回の負担 ${formatYen(charge.actual_burden)}</div>`
     : '';
   const key = reservation.digital_key;
@@ -775,7 +782,7 @@ function reservationCard(reservation, showActions) {
     : '';
 
   return `
-    <article class="reservation-card">
+    <article class="reservation-card" data-action="reservation-detail" data-id="${reservation.id}" data-date="${dateKey(new Date(reservation.start_time))}">
       <div class="reservation-main">
         <div class="reservation-title">
           ${esc(reservation.car?.name || '車')}
@@ -886,6 +893,17 @@ function renderPastReservations() {
   const now = Date.now();
   const past = state.reservations
     .filter((reservation) => new Date(reservation.end_time).getTime() < now)
+    .filter((reservation) => {
+      if (isAdmin()) return true;
+      const isOwner = reservation.member_id === state.currentUser?.member_id;
+      if (isOwner) return true;
+      const ride = reservation.ride_share;
+      if (ride?.driver_user_id === state.currentUser?.id) return true;
+      if (ride?.applications?.some(
+        (a) => a.applicant_user_id === state.currentUser?.id && a.status === 'accepted'
+      )) return true;
+      return false;
+    })
     .sort(
       (a, b) => new Date(b.start_time).getTime() - new Date(a.start_time).getTime()
     );
@@ -899,6 +917,124 @@ function renderReservationLists() {
   renderCalendar();
   renderCalendarDay();
   renderPastReservations();
+}
+
+function openReservationDayModal(date) {
+  console.debug('openReservationDayModal called', date);
+  if (!els.reservationDayModal) {
+    console.error('reservationDayModal element not found');
+    return;
+  }
+  if (!date || isNaN(date.getTime())) {
+    console.debug('invalid date', date);
+    return;
+  }
+  els.modalDateTitle.textContent = `${selectedDayFormatter.format(date)}の予約`;
+  renderReservationDayModal(date);
+  els.reservationDayModal.showModal();
+  console.debug('modal opened');
+}
+
+function closeReservationModal() {
+  els.reservationDayModal.close();
+}
+
+function renderReservationDayModal(date) {
+  const dayStart = startOfDay(date).getTime();
+  const dayEnd = endOfDay(date).getTime();
+  const now = Date.now();
+
+  const dayReservations = state.reservations
+    .filter((r) => {
+      const start = new Date(r.start_time).getTime();
+      const end = new Date(r.end_time).getTime();
+      return start < dayEnd && end > dayStart;
+    })
+    .sort((a, b) => new Date(a.start_time).getTime() - new Date(b.start_time).getTime());
+
+  const visible = dayReservations.filter((r) => {
+    const isOwner = r.member_id === state.currentUser?.member_id;
+    if (isAdmin()) return true;
+    const end = new Date(r.end_time).getTime();
+    if (end < now) {
+      // 過去の予約：運転者または承認済み相乗り参加者のみ
+      if (r.ride_share?.driver_user_id === state.currentUser?.id) return true;
+      if (r.ride_share?.applications?.some(
+        (a) => a.applicant_user_id === state.currentUser?.id && a.status === 'accepted'
+      )) return true;
+      return false;
+    }
+    return true;
+  });
+
+  if (visible.length === 0) {
+    els.modalReservations.innerHTML = '<p class="muted">この日の予約はありません。</p>';
+    return;
+  }
+
+  els.modalReservations.innerHTML = visible.map((r) => {
+    const isOwner = r.member_id === state.currentUser?.member_id;
+    const start = new Date(r.start_time);
+    const end = new Date(r.end_time);
+    const durationMinutes = Math.round((end - start) / 60000);
+    const durationHours = (durationMinutes / 60).toFixed(1);
+    const charge = r.charge;
+    const rideShare = r.ride_share;
+    const isPast = end < now;
+
+    let chargeHtml = '';
+    if ((isOwner || isAdmin()) && charge) {
+      const paymentLabel =
+        charge.payment_type === 'ticket' ? '6時間券' :
+        charge.payment_type === 'ticket_2' ? '6時間券×2' :
+        charge.payment_type === 'ticket_overflow' ? '6時間券＋超過' :
+        charge.payment_type === 'time_all' ? '時間料金' :
+        charge.payment_type ? '時間券' : '-';
+      chargeHtml = `<div class="reservation-detail-meta">${paymentLabel} / 負担 ${formatYen(charge.actual_burden)}</div>`;
+    }
+
+    let noteHtml = '';
+    if (r.note) {
+      const noteVisible = isOwner || isAdmin() || r.note_public;
+      if (noteVisible) {
+        noteHtml = `<div class="reservation-detail-note ${r.note_public ? 'public' : ''}">${esc(r.note)}</div>`;
+      }
+    }
+
+    let keyHtml = '';
+    if ((isOwner || isAdmin()) && r.digital_key) {
+      keyHtml = `<div class="reservation-detail-meta">キー: ${keyStatusLabel(r.digital_key.status)}</div>`;
+    }
+
+    const carpoolBadge =
+      rideShare?.status === 'open'
+        ? '<span class="carpool-badge"><svg class="icon" aria-hidden="true"><use href="#icon-people"></use></svg>相乗り募集中</span>'
+        : '';
+
+    const cancelBtn =
+      (isOwner || isAdmin()) && !isPast
+        ? `<button class="btn btn-danger btn-small cancel-detail-btn" type="button" data-action="cancel-reservation" data-id="${r.id}">キャンセル</button>`
+        : '';
+
+    return `
+      <article class="reservation-detail-card ${isOwner ? 'is-own' : 'is-other'}" data-action="reservation-detail" data-id="${r.id}" data-date="${dateKey(date)}">
+        <div class="reservation-detail-main">
+          <div class="reservation-detail-title">
+            ${esc(r.car?.name || '車')}
+            ${carpoolBadge}
+            <span class="chip">${esc(r.member?.name || '住人')}</span>
+          </div>
+          <div class="reservation-detail-time">${formatRange(r.start_time, r.end_time)}（約${durationHours}時間）</div>
+          ${chargeHtml}
+          ${keyHtml}
+          ${noteHtml}
+        </div>
+        <div class="reservation-detail-actions">
+          ${cancelBtn}
+        </div>
+      </article>
+    `;
+  }).join('');
 }
 
 function renderSettings() {
@@ -2114,8 +2250,18 @@ async function deleteUser(userId) {
 async function cancelReservation(reservationId) {
   if (!window.confirm('この予約をキャンセルしますか？')) return;
   try {
+    const reservation = state.reservations.find((r) => r.id === reservationId);
+    const rideShare = reservation?.ride_share;
+    const hasAcceptedCarpool =
+      rideShare &&
+      (rideShare.status === 'open' ||
+        rideShare.applications?.some((a) => a.status === 'accepted'));
     await apiFetch(`/reservations/${reservationId}`, { method: 'DELETE' });
-    toast('予約をキャンセルしました');
+    if (hasAcceptedCarpool) {
+      toast('予約をキャンセルしました（相乗り参加者にも通知されます）');
+    } else {
+      toast('予約をキャンセルしました');
+    }
     await loadAll();
   } catch (error) {
     if (error.message !== 'unauthorized') toast(error.message, true);
@@ -2144,6 +2290,10 @@ async function handleAction(action, id, dataset = {}) {
       break;
     case 'cancel-reservation':
       await cancelReservation(id);
+      break;
+    case 'reservation-detail':
+      console.debug('reservation-detail clicked', dataset);
+      void openReservationDayModal(new Date(dataset.date || ''));
       break;
     case 'purchase-pack':
       await purchasePack();
@@ -2257,7 +2407,9 @@ function bindEvents() {
   els.calendarGrid.addEventListener('click', (event) => {
     const dayButton = event.target.closest('[data-calendar-date]');
     if (!dayButton) return;
+    console.debug('calendar cell clicked', dayButton.dataset.calendarDate);
     selectCalendarDate(parseDateKey(dayButton.dataset.calendarDate));
+    void openReservationDayModal(parseDateKey(dayButton.dataset.calendarDate));
   });
 
   els.reservationForm.addEventListener('submit', async (event) => {
@@ -2587,7 +2739,7 @@ function bindEvents() {
     }
   });
 
-  [els.carDialog, els.memberDialog, els.userDialog, els.carpoolDialog]
+  [els.carDialog, els.memberDialog, els.userDialog, els.carpoolDialog, els.reservationDayModal]
     .filter(Boolean)
     .forEach((dialog) => {
       dialog.addEventListener('click', (event) => {

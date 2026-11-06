@@ -169,7 +169,7 @@ class ReservationCharge(Base):
     car_id = Column(Integer, ForeignKey("cars.id"), nullable=False)
     ticket_user_id = Column(Integer, ForeignKey("users.id"), nullable=True)
     ticket_id = Column(Integer, ForeignKey("time_tickets.id"), nullable=True)
-    payment_type = Column(String(10), nullable=False, default="time")
+    payment_type = Column(String(20), nullable=False, default="time")
     duration_minutes = Column(Integer, nullable=False, default=0)
     vehicle_value = Column(Integer, nullable=False, default=0)
     incremental_amount = Column(Integer, nullable=False, default=0)
