@@ -780,13 +780,20 @@ function reservationCard(reservation, showActions) {
         timeFormatter.format(new Date(key.valid_to))
       )}）</div>`
     : '';
+  const carpoolBadge =
+    reservation.ride_share?.status === 'open'
+      ? '<span class="carpool-badge carpool-badge--small">相乗り募集中</span>'
+      : '';
 
   return `
-    <article class="reservation-card" data-action="reservation-detail" data-id="${reservation.id}" data-date="${dateKey(new Date(reservation.start_time))}">
+    <article class="reservation-card${
+      reservation.ride_share?.status === 'open' ? ' has-carpool' : ''
+    }" data-action="reservation-detail" data-id="${reservation.id}" data-date="${dateKey(new Date(reservation.start_time))}">
       <div class="reservation-main">
         <div class="reservation-title">
           ${esc(reservation.car?.name || '車')}
           <span class="chip">${esc(reservation.member?.name || '住人')}</span>
+          ${carpoolBadge}
         </div>
         <div class="reservation-time">${esc(
           formatRange(reservation.start_time, reservation.end_time)
@@ -847,6 +854,9 @@ function renderCalendar() {
     if (key === selectedKey) classes.push('is-selected');
     if (key === dateKey(today)) classes.push('is-today');
     if (dayReservations.length) classes.push('has-reservations');
+    if (dayReservations.some((r) => r.ride_share?.status === 'open')) {
+      classes.push('has-carpool');
+    }
 
     const chips = dayReservations.slice(0, 3).map((reservation) => {
       const start = new Date(reservation.start_time);
@@ -854,9 +864,10 @@ function renderCalendar() {
       const timeLabel =
         start < dayStart ? '継続' : timeFormatter.format(start);
       const own = reservation.member_id === state.currentUser?.member_id;
-      return `<span class="calendar-chip ${own ? 'is-own' : ''}">${esc(
-        timeLabel
-      )} ${esc(reservation.car?.name || '車')}</span>`;
+      const carpool = reservation.ride_share?.status === 'open';
+      return `<span class="calendar-chip ${own ? 'is-own' : ''} ${
+        carpool ? 'is-carpool' : ''
+      }">${esc(timeLabel)} ${esc(reservation.car?.name || '車')}</span>`;
     });
     if (dayReservations.length > 3) {
       chips.push(

@@ -1506,3 +1506,34 @@ select:focus {
 .reservation-card:hover {
   background: var(--hover);
 }
+
+/* carpool highlight */
+.calendar-day.has-carpool {
+  position: relative;
+  background: var(--amber-bg);
+}
+
+.calendar-day.has-carpool::after {
+  content: '';
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: #f59e0b;
+}
+
+.calendar-chip.is-carpool {
+  background: #fef3c7;
+  color: #92400e;
+}
+
+.reservation-card.has-carpool {
+  border-left: 4px solid #f59e0b;
+}
+
+.carpool-badge--small {
+  padding: 1px 6px;
+  font-size: 0.64rem;
+}
