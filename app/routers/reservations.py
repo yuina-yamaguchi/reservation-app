@@ -34,7 +34,9 @@ def _with_relations(db: Session):
         joinedload(models.Reservation.car),
         joinedload(models.Reservation.member),
         joinedload(models.Reservation.charge),
-        joinedload(models.Reservation.ride_share),
+        joinedload(models.Reservation.ride_share).joinedload(
+            models.RideShare.applications
+        ),
     )
 
 
@@ -73,6 +75,13 @@ def reservation_to_response(
         {
             "status": ride_share.status,
             "driver_user_id": ride_share.driver_user_id,
+            "applications": [
+                {
+                    "applicant_user_id": application.applicant_user_id,
+                    "status": application.status,
+                }
+                for application in ride_share.applications
+            ],
         }
         if ride_share
         else None

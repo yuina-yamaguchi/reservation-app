@@ -894,7 +894,6 @@ function renderPastReservations() {
   const past = state.reservations
     .filter((reservation) => new Date(reservation.end_time).getTime() < now)
     .filter((reservation) => {
-      if (isAdmin()) return true;
       const isOwner = reservation.member_id === state.currentUser?.member_id;
       if (isOwner) return true;
       const ride = reservation.ride_share;
