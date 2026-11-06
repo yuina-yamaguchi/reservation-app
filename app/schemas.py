@@ -230,6 +230,7 @@ class ReservationCreate(BaseModel):
     start_time: datetime
     end_time: datetime
     note: str = Field(default="", max_length=500)
+    note_public: bool = False
     payment_type: Literal["ticket", "time"] = "time"
     ticket_user_id: int | None = None
 
@@ -252,6 +253,7 @@ class ReservationResponse(BaseModel):
     start_time: datetime
     end_time: datetime
     note: str
+    note_public: bool = False
     car: CarResponse
     member: MemberResponse
     charge: ChargeResponse | None = None
@@ -270,6 +272,7 @@ class CarpoolCreate(BaseModel):
     seats_offered: int = Field(default=1, ge=1, le=10)
     driver_guest_seats: int = Field(default=0, ge=0, le=10)
     note: str = Field(default="", max_length=500)
+    note_public: bool = False
     driver_user_id: int | None = None
 
     @field_validator("note")
@@ -284,6 +287,7 @@ class CarpoolUpdate(BaseModel):
     seats_offered: int | None = Field(default=None, ge=1, le=10)
     driver_guest_seats: int | None = Field(default=None, ge=0, le=10)
     note: str | None = Field(default=None, max_length=500)
+    note_public: bool | None = None
     status: Literal["open", "closed", "cancelled"] | None = None
 
     @field_validator("note")
@@ -323,6 +327,7 @@ class CarpoolResponse(BaseModel):
     driver_guest_seats: int
     remaining_seats: int
     note: str
+    note_public: bool = False
     status: str
     applications: list[RideApplicationResponse] = []
 

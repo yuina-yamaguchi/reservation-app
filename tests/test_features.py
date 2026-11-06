@@ -344,6 +344,115 @@ def test_carpool_flow_and_billing(auth_client):
     assert over_cap.status_code == 409
 
 
+def test_notes_are_private_by_default_and_can_be_public(auth_client):
+    car = create_car(auth_client, name="秘密車")
+    public_car = create_car(auth_client, name="公開車")
+    carpool_car = create_car(auth_client, name="相乗り車")
+    owner_member = create_member(auth_client, "山田")
+    other_member = create_member(auth_client, "鈴木")
+    create_user(auth_client, "owner", owner_member["id"])
+    create_user(auth_client, "other", other_member["id"])
+
+    logout(auth_client)
+    login(auth_client, "owner")
+    start = next_weekday(2)
+    private_note = auth_client.post(
+        "/api/reservations/",
+        json={
+            "car_id": car["id"],
+            "member_id": owner_member["id"],
+            "start_time": start.isoformat(),
+            "end_time": (start + timedelta(hours=1)).isoformat(),
+            "note": "本人だけのメモ",
+            "note_public": False,
+            "payment_type": "time",
+        },
+    )
+    assert private_note.status_code == 201
+    private_note_id = private_note.json()["id"]
+    assert private_note.json()["note"] == "本人だけのメモ"
+
+    public_note = auth_client.post(
+        "/api/reservations/",
+        json={
+            "car_id": public_car["id"],
+            "member_id": owner_member["id"],
+            "start_time": start.isoformat(),
+            "end_time": (start + timedelta(hours=1)).isoformat(),
+            "note": "公開メモ",
+            "note_public": True,
+            "payment_type": "time",
+        },
+    )
+    assert public_note.status_code == 201
+    public_note_id = public_note.json()["id"]
+    assert public_note.json()["note"] == "公開メモ"
+
+    carpool_reservation = create_reservation(
+        auth_client, carpool_car["id"], owner_member["id"], start
+    )
+    assert carpool_reservation.status_code == 201
+    carpool = auth_client.post(
+        "/api/carpools/",
+        json={
+            "reservation_id": carpool_reservation.json()["id"],
+            "note": "相乗りの秘密メモ",
+            "note_public": False,
+        },
+    )
+    assert carpool.status_code == 201
+    carpool_id = carpool.json()["id"]
+    assert carpool.json()["note"] == "相乗りの秘密メモ"
+    assert carpool.json()["note_public"] is False
+
+    owner_reservations = {
+        item["id"]: item for item in auth_client.get("/api/reservations/").json()
+    }
+    assert owner_reservations[private_note_id]["note"] == "本人だけのメモ"
+    assert owner_reservations[public_note_id]["note"] == "公開メモ"
+
+    logout(auth_client)
+    login(auth_client, "other")
+    other_reservations = {
+        item["id"]: item for item in auth_client.get("/api/reservations/").json()
+    }
+    assert other_reservations[private_note_id]["note"] == ""
+    assert other_reservations[public_note_id]["note"] == "公開メモ"
+
+    state = auth_client.get("/api/state/").json()
+    state_reservations = {item["id"]: item for item in state["reservations"]}
+    assert state_reservations[private_note_id]["note"] == ""
+    assert state_reservations[public_note_id]["note"] == "公開メモ"
+
+    other_carpools = {item["id"]: item for item in auth_client.get("/api/carpools/").json()}
+    assert other_carpools[carpool_id]["note"] == ""
+    assert other_carpools[carpool_id]["note_public"] is False
+
+    logout(auth_client)
+    login(auth_client, "owner")
+    owner_carpools = {item["id"]: item for item in auth_client.get("/api/carpools/").json()}
+    assert owner_carpools[carpool_id]["note"] == "相乗りの秘密メモ"
+
+    updated = auth_client.put(
+        f"/api/carpools/{carpool_id}", json={"note_public": True}
+    )
+    assert updated.status_code == 200
+    assert updated.json()["note"] == "相乗りの秘密メモ"
+
+    logout(auth_client)
+    login(auth_client, "other")
+    public_carpools = {item["id"]: item for item in auth_client.get("/api/carpools/").json()}
+    assert public_carpools[carpool_id]["note"] == "相乗りの秘密メモ"
+    assert public_carpools[carpool_id]["note_public"] is True
+
+    logout(auth_client)
+    login_admin(auth_client)
+    admin_reservations = {
+        item["id"]: item for item in auth_client.get("/api/reservations/").json()
+    }
+    assert admin_reservations[private_note_id]["note"] == ""
+
+
 def test_digital_keys_and_audit(auth_client):
     car = create_car(auth_client)
     member = create_member(auth_client, "山田")

@@ -20,7 +20,9 @@ def create_member(client, name="山田"):
     return response.json()
 
 
-def create_reservation(client, car_id, member_id, start, end, note=""):
+def create_reservation(
+    client, car_id, member_id, start, end, note="", note_public=False
+):
     return client.post(
         "/api/reservations/",
         json={
@@ -29,6 +31,7 @@ def create_reservation(client, car_id, member_id, start, end, note=""):
             "start_time": start.isoformat(),
             "end_time": end.isoformat(),
             "note": note,
+            "note_public": note_public,
         },
     )
 
@@ -58,7 +61,13 @@ def test_create_and_list_reservation(auth_client):
     end = start + timedelta(hours=2)
 
     response = create_reservation(
-        auth_client, car["id"], member["id"], start, end, note="買い物"
+        auth_client,
+        car["id"],
+        member["id"],
+        start,
+        end,
+        note="買い物",
+        note_public=True,
     )
     assert response.status_code == 201
 

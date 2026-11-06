@@ -37,6 +37,26 @@ def _with_relations(db: Session):
     )
 
 
+def can_view_reservation_note(
+    reservation: models.Reservation, current_user: models.User
+) -> bool:
+    if reservation.note_public:
+        return True
+    return (
+        current_user.member_id is not None
+        and reservation.member_id == current_user.member_id
+    )
+
+
+def reservation_to_response(
+    reservation: models.Reservation, current_user: models.User
+) -> dict:
+    data = schemas.ReservationResponse.model_validate(reservation).model_dump()
+    if not can_view_reservation_note(reservation, current_user):
+        data["note"] = ""
+    return data
+
+
 def _resolve_member(
     db: Session, current_user: models.User, member_id: int
 ) -> models.Member:
@@ -161,13 +181,26 @@ def _build_options(
 
 
 @router.get("/", response_model=list[schemas.ReservationResponse])
-def list_reservations(db: Session = Depends(get_db)):
+def list_reservations(
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(require_auth),
+):
     ticket_service.sweep_tickets(db)
-    return _with_relations(db).order_by(models.Reservation.start_time).all()
+    reservations = (
+        _with_relations(db).order_by(models.Reservation.start_time).all()
+    )
+    return [
+        reservation_to_response(reservation, current_user)
+        for reservation in reservations
+    ]
 
 
 @router.get("/{reservation_id}", response_model=schemas.ReservationResponse)
-def get_reservation(reservation_id: int, db: Session = Depends(get_db)):
+def get_reservation(
+    reservation_id: int,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(require_auth),
+):
     reservation = (
         _with_relations(db)
         .filter(models.Reservation.id == reservation_id)
@@ -175,7 +208,7 @@ def get_reservation(reservation_id: int, db: Session = Depends(get_db)):
     )
     if not reservation:
         raise HTTPException(status_code=404, detail="予約が見つかりません")
-    return reservation
+    return reservation_to_response(reservation, current_user)
 
 
 @router.post(
@@ -291,7 +324,7 @@ def create_reservation(
 
     db.commit()
     db.refresh(db_reservation)
-    return db_reservation
+    return reservation_to_response(db_reservation, current_user)
 
 
 @router.delete("/{reservation_id}", status_code=status.HTTP_204_NO_CONTENT)

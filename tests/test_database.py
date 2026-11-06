@@ -1,3 +1,4 @@
+from sqlalchemy import create_engine, inspect, text
 from sqlalchemy.pool import NullPool
 
 from app import database
@@ -41,3 +42,31 @@ def test_libsql_database_url_uses_nullpool(monkeypatch):
     assert captured["connect_args"] == {"check_same_thread": False}
     assert captured["poolclass"] is NullPool
     assert captured["pool_reset_on_return"] is None
+
+
+def test_apply_schema_upgrades_adds_note_public_columns(tmp_path, monkeypatch):
+    engine = create_engine(f"sqlite:///{(tmp_path / 'old.db').as_posix()}")
+    with engine.begin() as connection:
+        connection.execute(
+            text(
+                "CREATE TABLE reservations "
+                "(id INTEGER PRIMARY KEY, note TEXT NOT NULL DEFAULT '')"
+            )
+        )
+        connection.execute(
+            text(
+                "CREATE TABLE ride_shares "
+                "(id INTEGER PRIMARY KEY, note TEXT NOT NULL DEFAULT '')"
+            )
+        )
+
+    monkeypatch.setattr(database, "engine", engine)
+    database.apply_schema_upgrades()
+
+    assert "note_public" in {
+        column["name"] for column in inspect(engine).get_columns("reservations")
+    }
+    assert "note_public" in {
+        column["name"] for column in inspect(engine).get_columns("ride_shares")
+    }
+    engine.dispose()

@@ -7,7 +7,7 @@ from fastapi.staticfiles import StaticFiles
 from . import models
 from .auth import require_admin, require_auth
 from .bootstrap import ensure_default_admin
-from .database import Base, engine
+from .database import Base, apply_schema_upgrades, engine
 from .routers import (
     admin,
     auth,
@@ -27,6 +27,7 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 STATIC_DIR = BASE_DIR / "static"
 
 Base.metadata.create_all(bind=engine)
+apply_schema_upgrades()
 ensure_default_admin()
 
 app = FastAPI(

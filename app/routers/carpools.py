@@ -29,7 +29,15 @@ def _remaining_seats(ride: models.RideShare) -> int:
     return max(0, ride.seats_offered - _accepted_count(ride))
 
 
-def _ride_response(ride: models.RideShare) -> dict:
+def _can_view_note(ride: models.RideShare, current_user: models.User) -> bool:
+    if ride.note_public:
+        return True
+    return ride.driver_user_id == current_user.id
+
+
+def _ride_response(
+    ride: models.RideShare, current_user: models.User
+) -> dict:
     reservation = ride.reservation
     return {
         "id": ride.id,
@@ -46,7 +54,8 @@ def _ride_response(ride: models.RideShare) -> dict:
         "seats_offered": ride.seats_offered,
         "driver_guest_seats": ride.driver_guest_seats,
         "remaining_seats": _remaining_seats(ride),
-        "note": ride.note,
+        "note": ride.note if _can_view_note(ride, current_user) else "",
+        "note_public": ride.note_public,
         "status": ride.status,
         "applications": [_application_response(app) for app in ride.applications],
     }
@@ -111,7 +120,7 @@ def list_carpools(
             )
         )
     rides = query.order_by(models.RideShare.id.desc()).all()
-    return [_ride_response(ride) for ride in rides]
+    return [_ride_response(ride, current_user) for ride in rides]
 
 
 @router.post(
@@ -185,12 +194,13 @@ def create_carpool(
         seats_offered=payload.seats_offered,
         driver_guest_seats=payload.driver_guest_seats,
         note=payload.note,
+        note_public=payload.note_public,
         status="open",
     )
     db.add(ride)
     db.commit()
     ride = _get_ride(db, ride.id)
-    return _ride_response(ride)
+    return _ride_response(ride, current_user)
 
 
 @router.put("/{ride_id}", response_model=schemas.CarpoolResponse)
@@ -214,6 +224,8 @@ def update_carpool(
     for field in ("gender_filter", "note"):
         if field in data and data[field] is not None:
             setattr(ride, field, data[field])
+    if "note_public" in data and data["note_public"] is not None:
+        ride.note_public = data["note_public"]
     if "seats_offered" in data and data["seats_offered"] is not None:
         _validate_seats(
             ride, data["seats_offered"], ride.driver_guest_seats
@@ -234,7 +246,7 @@ def update_carpool(
 
     db.commit()
     ride = _get_ride(db, ride.id)
-    return _ride_response(ride)
+    return _ride_response(ride, current_user)
 
 
 @router.delete("/{ride_id}", status_code=status.HTTP_204_NO_CONTENT)

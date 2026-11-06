@@ -58,6 +58,7 @@ const els = {
   startTime: $('#startTime'),
   endTime: $('#endTime'),
   note: $('#note'),
+  notePublic: $('#notePublic'),
   reserveSubmit: $('#reserveSubmit'),
   calendarTitle: $('#calendarTitle'),
   calendarPrev: $('#calendarPrev'),
@@ -98,6 +99,7 @@ const els = {
   carpoolSeats: $('#carpoolSeats'),
   carpoolGuestSeats: $('#carpoolGuestSeats'),
   carpoolNote: $('#carpoolNote'),
+  carpoolNotePublic: $('#carpoolNotePublic'),
   carpoolList: $('#carpoolList'),
   keyDeviceList: $('#keyDeviceList'),
   keyDeviceForm: $('#keyDeviceForm'),
@@ -2096,6 +2098,7 @@ function bindEvents() {
         start_time: els.startTime.value,
         end_time: els.endTime.value,
         note: els.note.value.trim(),
+        note_public: els.notePublic.checked,
         payment_type: state.selectedPaymentType,
       };
 
@@ -2104,6 +2107,7 @@ function bindEvents() {
         body: JSON.stringify(payload),
       });
       els.note.value = '';
+      els.notePublic.checked = false;
       state.reservationOptions = null;
       state.selectedPaymentType = 'time';
       updateReserveSubmitState();
@@ -2302,9 +2306,11 @@ function bindEvents() {
           seats_offered: Number(els.carpoolSeats.value) || 1,
           driver_guest_seats: Number(els.carpoolGuestSeats.value) || 0,
           note: els.carpoolNote.value.trim(),
+          note_public: els.carpoolNotePublic.checked,
         }),
       });
       els.carpoolNote.value = '';
+      els.carpoolNotePublic.checked = false;
       toast('相乗り募集を作成しました');
       await loadAll();
     } catch (error) {

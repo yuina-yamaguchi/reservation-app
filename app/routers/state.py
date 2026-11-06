@@ -7,6 +7,7 @@ from ..auth import require_auth, user_to_dict
 from ..database import get_db
 from .carpools import _application_response, _ride_query, _ride_response
 from .key_devices import _to_response as _device_response
+from .reservations import reservation_to_response
 
 router = APIRouter(prefix="/state", tags=["状態"])
 
@@ -25,16 +26,19 @@ def get_state(
 
     cars = db.query(models.Car).order_by(models.Car.id).all()
     members = db.query(models.Member).order_by(models.Member.id).all()
-    reservations = (
-        db.query(models.Reservation)
-        .options(
-            joinedload(models.Reservation.car),
-            joinedload(models.Reservation.member),
-            joinedload(models.Reservation.charge),
+    reservations = [
+        reservation_to_response(reservation, current_user)
+        for reservation in (
+            db.query(models.Reservation)
+            .options(
+                joinedload(models.Reservation.car),
+                joinedload(models.Reservation.member),
+                joinedload(models.Reservation.charge),
+            )
+            .order_by(models.Reservation.start_time)
+            .all()
         )
-        .order_by(models.Reservation.start_time)
-        .all()
-    )
+    ]
 
     users = []
     if current_user.role == "admin":
@@ -72,7 +76,7 @@ def get_state(
         .order_by(models.RideShare.id.desc())
         .all()
     )
-    carpools = [_ride_response(ride) for ride in rides]
+    carpools = [_ride_response(ride, current_user) for ride in rides]
 
     my_applications = [
         _application_response(application)

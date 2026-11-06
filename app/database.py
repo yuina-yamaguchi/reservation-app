@@ -2,7 +2,7 @@ import os
 from pathlib import Path
 
 from dotenv import load_dotenv
-from sqlalchemy import create_engine
+from sqlalchemy import create_engine, inspect, text
 from sqlalchemy.orm import declarative_base, sessionmaker
 from sqlalchemy.pool import NullPool
 
@@ -53,6 +53,28 @@ def _create_engine():
 engine = _create_engine()
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 Base = declarative_base()
+
+
+SCHEMA_ADDITIONS = (
+    ("reservations", "note_public", "BOOLEAN NOT NULL DEFAULT 0"),
+    ("ride_shares", "note_public", "BOOLEAN NOT NULL DEFAULT 0"),
+)
+
+
+def apply_schema_upgrades() -> None:
+    """既存テーブルに後から追加した列を作成する。"""
+    inspector = inspect(engine)
+    tables = set(inspector.get_table_names())
+    for table, column, definition in SCHEMA_ADDITIONS:
+        if table not in tables:
+            continue
+        columns = {item["name"] for item in inspector.get_columns(table)}
+        if column in columns:
+            continue
+        with engine.begin() as connection:
+            connection.execute(
+                text(f"ALTER TABLE {table} ADD COLUMN {column} {definition}")
+            )
 
 
 def get_db():

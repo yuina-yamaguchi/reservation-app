@@ -125,6 +125,7 @@ class Reservation(Base):
     start_time = Column(DateTime, nullable=False)
     end_time = Column(DateTime, nullable=False)
     note = Column(String(500), nullable=False, default="")
+    note_public = Column(Boolean, nullable=False, default=False)
 
     car = relationship("Car", back_populates="reservations")
     member = relationship("Member", back_populates="reservations")
@@ -230,6 +231,7 @@ class RideShare(Base):
     seats_offered = Column(Integer, nullable=False, default=1)
     driver_guest_seats = Column(Integer, nullable=False, default=0)
     note = Column(String(500), nullable=False, default="")
+    note_public = Column(Boolean, nullable=False, default=False)
     status = Column(String(20), nullable=False, default="open", index=True)
     created_at = Column(DateTime, nullable=False, default=datetime.now)
 
