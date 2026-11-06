@@ -967,7 +967,7 @@ function renderSettings() {
               <div class="setting-actions">
                 <button class="btn btn-ghost btn-small" type="button" data-action="grant-ticket" data-id="${
                   user.id
-                }">券付与</button>
+                }">例外付与</button>
                 <button class="icon-btn" type="button" data-action="edit-user" data-id="${
                   user.id
                 }" aria-label="${esc(user.username)}を編集">${editIcon}</button>
@@ -994,8 +994,10 @@ function renderPlanCard() {
     name: '時間券のみ',
     monthly_fee: 0,
     included_tickets: 0,
+    extra_six_hour_price: 4200,
     carry_over: false,
   };
+  const extraPrice = plan.extra_six_hour_price ?? 4200;
   const tickets = Array.isArray(state.tickets) ? state.tickets : [];
   const available = tickets.filter(
     (ticket) => ticket.status === 'available'
@@ -1025,9 +1027,10 @@ function renderPlanCard() {
     <div class="stat-row"><span>利用可能な券</span><strong>${available.length}枚</strong></div>
     <p class="form-hint">券は発行月の翌月末まで有効です。</p>
     <div class="ticket-list">${ticketRows}</div>
+    <p class="form-hint">購入額は月別利用額に加算され、後精算になります。</p>
     <div class="form-actions">
-      <button class="btn btn-ghost btn-small" type="button" data-action="purchase-pack">6時間パックを購入（4,200円）</button>
-      <button class="btn btn-ghost btn-small" type="button" data-action="purchase-extra">追加6時間券を購入（3,800円）</button>
+      <button class="btn btn-ghost btn-small" type="button" data-action="purchase-pack">6時間パックを購入（${formatYen(4200)}）</button>
+      <button class="btn btn-ghost btn-small" type="button" data-action="purchase-extra">追加6時間券を購入（${formatYen(extraPrice)}）</button>
     </div>
     <div class="section-head section-head--spaced">
       <h2>プラン・プロフィール</h2>
@@ -1544,13 +1547,19 @@ async function loadKeyAudit() {
 }
 
 async function purchasePack() {
-  if (!window.confirm('6時間パックを4,200円で購入しますか？')) return;
+  if (
+    !window.confirm(
+      '6時間パックを4,200円で購入しますか？購入額は今月の利用額に加算されます。'
+    )
+  ) {
+    return;
+  }
   try {
     await apiFetch('/tickets/purchase', {
       method: 'POST',
       body: JSON.stringify({ source: 'pack', count: 1 }),
     });
-    toast('6時間パックを購入しました');
+    toast('6時間パックを購入しました（今月の利用額に加算）');
     await loadAll();
   } catch (error) {
     if (error.message !== 'unauthorized') toast(error.message, true);
@@ -1558,13 +1567,21 @@ async function purchasePack() {
 }
 
 async function purchaseExtraTicket() {
-  if (!window.confirm('追加6時間券を3,800円で購入しますか？')) return;
+  const plan = planByCode(state.profile?.plan || state.currentUser?.plan);
+  const price = plan?.extra_six_hour_price ?? 4200;
+  if (
+    !window.confirm(
+      `追加6時間券を${formatYen(price)}で購入しますか？購入額は今月の利用額に加算されます。`
+    )
+  ) {
+    return;
+  }
   try {
     await apiFetch('/tickets/purchase', {
       method: 'POST',
       body: JSON.stringify({ source: 'extra', count: 1 }),
     });
-    toast('追加6時間券を購入しました');
+    toast('追加6時間券を購入しました（今月の利用額に加算）');
     await loadAll();
   } catch (error) {
     if (error.message !== 'unauthorized') toast(error.message, true);
@@ -1607,7 +1624,10 @@ async function saveMyProfile() {
 }
 
 async function grantTicket(userId) {
-  const countText = window.prompt('付与する追加6時間券の枚数（1〜10）', '1');
+  const countText = window.prompt(
+    '例外付与する追加6時間券の枚数（1〜10）',
+    '1'
+  );
   if (countText === null) return;
   const count = Number(countText);
   if (!Number.isInteger(count) || count < 1 || count > 10) {
@@ -1619,7 +1639,7 @@ async function grantTicket(userId) {
       method: 'POST',
       body: JSON.stringify({ source: 'extra', count }),
     });
-    toast('追加6時間券を付与しました');
+    toast('追加6時間券を例外付与しました（利用額に加算）');
     await loadAll();
   } catch (error) {
     if (error.message !== 'unauthorized') toast(error.message, true);
@@ -2141,6 +2161,9 @@ function bindEvents() {
   els.reserveCar.addEventListener('change', scheduleOptionsRefresh);
   els.reserveMember.addEventListener('change', scheduleOptionsRefresh);
   els.refreshOptionsBtn.addEventListener('click', () => {
+    clearTimeout(optionTimer);
+    state.reservationOptions = null;
+    if (els.reservationOptions) els.reservationOptions.innerHTML = '';
     void refreshReservationOptions();
   });
   els.reservationOptions.addEventListener('change', (event) => {
