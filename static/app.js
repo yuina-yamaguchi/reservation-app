@@ -952,27 +952,12 @@ function renderReservationDayModal(date) {
     })
     .sort((a, b) => new Date(a.start_time).getTime() - new Date(b.start_time).getTime());
 
-  const visible = dayReservations.filter((r) => {
-    const isOwner = r.member_id === state.currentUser?.member_id;
-    if (isAdmin()) return true;
-    const end = new Date(r.end_time).getTime();
-    if (end < now) {
-      // 過去の予約：運転者または承認済み相乗り参加者のみ
-      if (r.ride_share?.driver_user_id === state.currentUser?.id) return true;
-      if (r.ride_share?.applications?.some(
-        (a) => a.applicant_user_id === state.currentUser?.id && a.status === 'accepted'
-      )) return true;
-      return false;
-    }
-    return true;
-  });
-
-  if (visible.length === 0) {
+  if (dayReservations.length === 0) {
     els.modalReservations.innerHTML = '<p class="muted">この日の予約はありません。</p>';
     return;
   }
 
-  els.modalReservations.innerHTML = visible.map((r) => {
+  els.modalReservations.innerHTML = dayReservations.map((r) => {
     const isOwner = r.member_id === state.currentUser?.member_id;
     const start = new Date(r.start_time);
     const end = new Date(r.end_time);
