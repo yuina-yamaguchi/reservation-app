@@ -1,7 +1,7 @@
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 
-from .. import models, schemas
+from .. import models, schemas, ticket_service
 from ..auth import require_admin
 from ..database import get_db
 
@@ -28,8 +28,14 @@ def get_car(car_id: int, db: Session = Depends(get_db)):
     dependencies=[Depends(require_admin)],
 )
 def create_car(car: schemas.CarCreate, db: Session = Depends(get_db)):
-    db_car = models.Car(**car.model_dump())
+    data = car.model_dump()
+    seat_capacity = data.pop("seat_capacity", 4)
+    db_car = models.Car(**data)
     db.add(db_car)
+    db.flush()
+    db_car.profile = models.CarProfile(
+        car_id=db_car.id, seat_capacity=seat_capacity
+    )
     db.commit()
     db.refresh(db_car)
     return db_car
@@ -47,8 +53,12 @@ def update_car(
     if not db_car:
         raise HTTPException(status_code=404, detail="車が見つかりません")
 
-    for key, value in car.model_dump().items():
+    data = car.model_dump()
+    seat_capacity = data.pop("seat_capacity", 4)
+    for key, value in data.items():
         setattr(db_car, key, value)
+    profile = ticket_service.ensure_car_profile(db, db_car)
+    profile.seat_capacity = seat_capacity
 
     db.commit()
     db.refresh(db_car)
@@ -74,6 +84,17 @@ def delete_car(car_id: int, db: Session = Depends(get_db)):
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
             detail="この車には予約があるため削除できません。先に予約をキャンセルしてください。",
+        )
+
+    has_key = (
+        db.query(models.DigitalKey.id)
+        .filter(models.DigitalKey.car_id == car_id)
+        .first()
+    )
+    if has_key:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="この車にはデジタルキーの履歴があるため削除できません。",
         )
 
     db.delete(car)

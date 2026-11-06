@@ -97,7 +97,16 @@ def test_conflicting_reservation_returns_409(auth_client):
         end,
         end + timedelta(hours=1),
     )
-    assert adjacent.status_code == 201
+    assert adjacent.status_code == 409
+
+    after_buffer = create_reservation(
+        auth_client,
+        car["id"],
+        member["id"],
+        end + timedelta(minutes=30),
+        end + timedelta(minutes=90),
+    )
+    assert after_buffer.status_code == 201
 
 
 def test_end_time_must_be_after_start_time(auth_client):

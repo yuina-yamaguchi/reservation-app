@@ -20,7 +20,14 @@
 - 車の登録・編集・削除（管理者）
 - 住人（名字）の登録・編集・削除（管理者）
 - 車・利用者・日時を指定した予約
-- 同じ車の時間帯重複を防止
+- 同じ車の時間帯重複を防止（前後30分の引き渡しバッファ込み）
+- 料金プラン（時間券のみ／ライト／スタンダード）とプラン変更
+- 6時間券の発行・購入・予約時の利用（時間券／6時間券を選択）
+- 予約可能期間の制限（6時間券は30日前、時間券は14日前まで）
+- 土日祝の先行予約は利用者ごとに2件まで（管理者は免除）
+- 相乗り募集・申込・承認（近場300円/席、郊外500円/席）
+- 月別の利用額表示（プラン月額・券購入・利用料・相乗り席代）
+- デジタルキー発行（モック）と管理者マスターキー・監査ログ
 - 月間カレンダーと選択日の予約詳細
 - 予約一覧（過去）とキャンセル
 - 予約完了後、予約日を選択したカレンダー表示へ自動遷移
@@ -43,6 +50,13 @@
 | 自分の予約作成 | ○ | ○ |
 | 全員分の予約キャンセル | ○ | × |
 | 自分の予約キャンセル | ○ | ○ |
+| 自分の料金プラン変更 | ○ | ○ |
+| 自分の性別・キー受取人ID変更 | ○ | ○ |
+| 他ユーザーの料金プラン・プロフィール変更 | ○ | × |
+| 追加6時間券の付与 | ○ | × |
+| 相乗り募集・申込・承認 | ○ | ○（自分の予約のみ募集） |
+| キーボックス管理・マスターキー発行 | ○ | × |
+| 全員分の月別利用額閲覧 | ○ | × |
 | 設定画面の表示 | ○ | × |
 
 利用者は、管理画面で紐付けた住人としてのみ予約できます。予約時に別の住人IDを送信しても、
@@ -67,6 +81,10 @@ car-manager/
 │   ├── models.py          # テーブル定義
 │   ├── schemas.py         # リクエスト/レスポンス型
 │   ├── auth.py            # パスワードハッシュ・署名Cookie・権限・試行制限
+│   ├── pricing.py         # 料金・券・予約期間・祝日・キー有効期間
+│   ├── ticket_service.py  # 6時間券の発行・検索・消費・月次処理
+│   ├── key_service.py     # デジタルキー・マスターキー・監査・試行制限
+│   ├── key_provider/      # キー事業者抽象化（mock実装）
 │   ├── bootstrap.py       # 初回管理者アカウント作成
 │   ├── seed_data.py       # 初期データ定義
 │   └── routers/
@@ -74,8 +92,14 @@ car-manager/
 │       ├── admin.py       # 初期データ投入API
 │       ├── cars.py
 │       ├── members.py
-│       ├── users.py       # ユーザー管理API（管理者のみ）
-│       └── reservations.py
+│       ├── users.py       # ユーザー・プラン・プロフィール・券
+│       ├── reservations.py # 予約・予約オプション・料金
+│       ├── tickets.py     # 券一覧・購入
+│       ├── billing.py     # 月別利用額
+│       ├── carpools.py    # 相乗り募集・申込・承認
+│       ├── key_devices.py # キーボックス管理
+│       ├── digital_keys.py # デジタルキー・マスターキー
+│       └── state.py       # 初期表示用の一括取得
 ├── static/
 │   ├── index.html
 │   ├── app.css
@@ -177,7 +201,7 @@ python -m pytest -q
 | POST | `/api/auth/logout` | 不要 | ログアウト |
 | GET | `/api/auth/me` | ログイン済み | ログイン中のユーザー情報 |
 | GET | `/api/health` | 不要 | ヘルスチェック |
-| GET | `/api/state/` | ログイン済み | 車・住人・予約・ユーザーを一括取得 |
+| GET | `/api/state/` | ログイン済み | 車・住人・予約・ユーザー・券・相乗り・キー情報を一括取得 |
 | POST | `/api/admin/seed` | 管理者 | 空のテーブルに初期データを投入 |
 | GET | `/api/cars/` | ログイン済み | 車一覧 |
 | POST | `/api/cars/` | 管理者 | 車を登録 |
@@ -191,14 +215,54 @@ python -m pytest -q
 | POST | `/api/users/` | 管理者 | ユーザーを登録 |
 | PUT | `/api/users/{id}` | 管理者 | ユーザーを更新 |
 | DELETE | `/api/users/{id}` | 管理者 | ユーザーを削除 |
+| PUT | `/api/users/{id}/plan` | 管理者または本人 | 料金プランを変更 |
+| PUT | `/api/users/{id}/profile` | 管理者または本人 | 性別・キー受取人IDを変更 |
+| GET | `/api/users/{id}/tickets` | 管理者 | ユーザーの6時間券一覧 |
+| POST | `/api/users/{id}/tickets` | 管理者 | 追加6時間券を付与 |
+| GET | `/api/tickets/me` | ログイン済み | 自分の6時間券一覧 |
+| POST | `/api/tickets/purchase` | ログイン済み | 6時間パック購入（モック決済） |
+| GET | `/api/billing/me?month=YYYY-MM` | ログイン済み | 自分の月別利用額 |
+| GET | `/api/billing/users/{id}?month=YYYY-MM` | 管理者 | 指定ユーザーの月別利用額 |
 | GET | `/api/reservations/` | ログイン済み | 予約一覧（開始日時順） |
 | GET | `/api/reservations/{id}` | ログイン済み | 予約詳細 |
-| POST | `/api/reservations/` | ログイン済み | 予約作成（重複時409） |
+| POST | `/api/reservations/options` | ログイン済み | 予約可能な支払い方法・料金を取得 |
+| POST | `/api/reservations/` | ログイン済み | 予約作成（重複・期間・土日上限違反は409） |
 | DELETE | `/api/reservations/{id}` | ログイン済み | 予約キャンセル（利用者は自分の予約のみ） |
+| GET | `/api/carpools/` | ログイン済み | 相乗り募集一覧（`include_closed=true`で終了分も） |
+| POST | `/api/carpools/` | ログイン済み | 相乗り募集を作成（自分の予約のみ） |
+| PUT | `/api/carpools/{id}` | 募集者または管理者 | 相乗り募集を更新 |
+| DELETE | `/api/carpools/{id}` | 募集者または管理者 | 相乗り募集を中止 |
+| POST | `/api/carpools/{id}/apply` | ログイン済み | 相乗りに申し込む |
+| DELETE | `/api/carpools/{id}/applications` | ログイン済み | 自分の申し込みを取り消す |
+| POST | `/api/carpools/{id}/applications/{application_id}/approve` | 募集者または管理者 | 申し込みを承認 |
+| POST | `/api/carpools/{id}/applications/{application_id}/reject` | 募集者または管理者 | 申し込みを却下 |
+| GET | `/api/key-devices/` | 管理者 | キーボックス一覧 |
+| POST | `/api/key-devices/` | 管理者 | キーボックスを登録 |
+| PUT | `/api/key-devices/{id}` | 管理者 | キーボックスを更新 |
+| DELETE | `/api/key-devices/{id}` | 管理者 | キーボックスを削除 |
+| POST | `/api/key-devices/{id}/sync` | 管理者 | キーボックス状態を同期 |
+| GET | `/api/digital-keys/me` | ログイン済み | 自分のデジタルキー一覧 |
+| POST | `/api/digital-keys/issue-due` | ログイン済み | 発行可能なキーを発行 |
+| GET | `/api/digital-keys/admin` | 管理者 | 全デジタルキー一覧 |
+| GET | `/api/digital-keys/audit` | 管理者 | キー監査ログ |
+| POST | `/api/digital-keys/cars/{car_id}/master` | 管理者 | マスターキーを発行 |
+| POST | `/api/digital-keys/cars/{car_id}/remote-unlock` | 管理者 | 遠隔解錠（モック） |
+| POST | `/api/digital-keys/{id}/revoke` | 管理者または本人 | デジタルキーを失効 |
 
 利用者が予約を作成する場合、`member_id` はログイン中のユーザーに紐付く住人IDへ
 サーバー側で上書きされます。利用者が他の住人の予約をキャンセルしようとすると `403` を返します。
 最後の管理者は削除・降格できません。
+
+### 料金・券・相乗りのルール
+
+- プラン: `none`（0円・券なし）、`light`（3,900円/月・6時間券1枚）、`standard`（8,000円/月・6時間券3枚）。
+- 6時間券は付与月の翌月末まで有効。追加券は3,800円、6時間パックは4,200円（モック決済）。
+- 予約時の支払い方法は「時間券」または「6時間券」。両方使える場合は両方返します。
+- 6時間券は30日前、時間券は14日前まで予約可能。土日祝は利用者ごとに今後2件まで（管理者は免除）。
+- 同じ車の予約は前後30分の引き渡しバッファを含めて重複判定します。
+- キャンセルは土日祝7日前、平日3日前まで。期限後のキャンセル・無断利用は券を消費します。
+- 相乗りは近場300円/席、郊外500円/席。同性フィルター・外部友人席に対応し、値引き上限は車両代金相当額です。
+- デジタルキーは `KEY_PROVIDER=mock` のモック実装です。マスターキーは管理者のみ、10分有効、理由必須、監査ログ付きです。
 
 ## 環境変数
 
@@ -212,6 +276,8 @@ python -m pytest -q
 | `DATABASE_PATH` | 任意 | ローカルSQLiteのパス |
 | `TURSO_DATABASE_URL` | 任意 | Tursoの接続URL |
 | `TURSO_AUTH_TOKEN` | 任意 | Tursoの認証トークン |
+| `DIGITAL_KEY_ENABLED` | 任意 | デジタルキー機能の有効化（既定 `true`） |
+| `KEY_PROVIDER` | 任意 | キー事業者（既定 `mock`。未実装時もモック） |
 
 `TURSO_DATABASE_URL` と `TURSO_AUTH_TOKEN` の両方を設定するとTursoに接続し、
 どちらも未設定の場合はローカルSQLiteを使います。片方だけ設定した場合は
@@ -343,6 +409,9 @@ python -m fastapi cloud logs --no-follow
 - 本番では必ずHTTPSで運用し、`COOKIE_SECURE=true` を設定してください。
 - `SESSION_SECRET` を変更すると、既存のログインセッションはすべて無効になります。
 - ログイン試行は同一IPあたり5回／5分に制限しています（プロセス内の簡易制限）。
+- デジタルキーは現在モック実装です。実車の解錠には使用できません。本番導入時は `KEY_PROVIDER` の実装を追加してください。
+- マスターキーは管理者のみ発行でき、10分有効・理由必須・監査ログ記録・レート制限（管理者10回/10分、車両5回/10分）があります。
+- キー監査ログには操作者・対象車両・操作・結果・理由・日時を記録します。
 
 ## データのリセット（ローカル）
 
@@ -354,4 +423,4 @@ python seed.py
 ## Service Workerの更新
 
 フロントエンドを更新した際は、`static/service-worker.js` の `CACHE_NAME` を
-`reservation-app-v5` のように変更すると、古いキャッシュを確実に破棄できます。
+`reservation-app-v7` のように変更すると、古いキャッシュを確実に破棄できます。

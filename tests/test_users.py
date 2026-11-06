@@ -44,7 +44,10 @@ def login(client, username, password):
 
 
 def create_reservation(client, car_id, member_id, start=None, hours=1):
-    start = start or datetime(2027, 5, 1, 10, 0)
+    if start is None:
+        start = (datetime.now() + timedelta(days=3)).replace(
+            hour=10, minute=0, second=0, microsecond=0
+        )
     return client.post(
         "/api/reservations/",
         json={

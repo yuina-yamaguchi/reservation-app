@@ -109,6 +109,9 @@ def user_to_dict(user: models.User) -> dict:
         "role": user.role,
         "member_id": user.member_id,
         "member_name": user.member.name if user.member else None,
+        "plan": user.plan,
+        "gender": user.gender,
+        "provider_recipient_id": user.provider_recipient_id,
     }
 
 

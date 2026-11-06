@@ -1,23 +1,37 @@
 'use strict';
 
 const API = '/api';
-const CACHE_KEY = 'reservation-app-state-v2';
+const CACHE_KEY = 'reservation-app-state-v4';
 
 const state = {
   cars: [],
   members: [],
   reservations: [],
   users: [],
+  plans: [],
+  profile: null,
+  tickets: [],
+  carpools: [],
+  myApplications: [],
+  keyDevices: [],
+  digitalKeys: [],
+  masterKeys: [],
   currentUser: null,
   activeTab: 'home',
   calendarCursor: startOfMonth(new Date()),
   selectedDate: startOfDay(new Date()),
+  reservationOptions: null,
+  selectedPaymentType: 'time',
+  billing: null,
+  billingUserId: '',
+  optionRequestId: 0,
 };
 
 const TAB_TITLES = {
   home: 'ホーム',
   reserve: '予約する',
   list: '予約一覧',
+  carpool: '相乗り',
   settings: '設定',
 };
 
@@ -67,6 +81,39 @@ const els = {
   userPassword: $('#userPassword'),
   userRole: $('#userRole'),
   userMember: $('#userMember'),
+  carSeatCapacity: $('#carSeatCapacity'),
+  editCarSeatCapacity: $('#editCarSeatCapacity'),
+  editUserPlan: $('#editUserPlan'),
+  editUserGender: $('#editUserGender'),
+  editUserRecipient: $('#editUserRecipient'),
+  planCard: $('#planCard'),
+  billingCard: $('#billingCard'),
+  reservationOptions: $('#reservationOptions'),
+  reservationOptionsHint: $('#reservationOptionsHint'),
+  refreshOptionsBtn: $('#refreshOptionsBtn'),
+  carpoolForm: $('#carpoolForm'),
+  carpoolReservation: $('#carpoolReservation'),
+  carpoolArea: $('#carpoolArea'),
+  carpoolGender: $('#carpoolGender'),
+  carpoolSeats: $('#carpoolSeats'),
+  carpoolGuestSeats: $('#carpoolGuestSeats'),
+  carpoolNote: $('#carpoolNote'),
+  carpoolList: $('#carpoolList'),
+  keyDeviceList: $('#keyDeviceList'),
+  keyDeviceForm: $('#keyDeviceForm'),
+  keyDeviceCar: $('#keyDeviceCar'),
+  keyDeviceId: $('#keyDeviceId'),
+  keyDeviceName: $('#keyDeviceName'),
+  masterKeyCar: $('#masterKeyCar'),
+  masterPassword: $('#masterPassword'),
+  masterReason: $('#masterReason'),
+  masterConfirmInUse: $('#masterConfirmInUse'),
+  masterKeyBtn: $('#masterKeyBtn'),
+  remoteUnlockBtn: $('#remoteUnlockBtn'),
+  masterKeyResult: $('#masterKeyResult'),
+  masterKeyList: $('#masterKeyList'),
+  keyAuditList: $('#keyAuditList'),
+  keyAuditRefresh: $('#keyAuditRefresh'),
   toast: $('#toast'),
   carDialog: $('#carDialog'),
   memberDialog: $('#memberDialog'),
@@ -121,6 +168,15 @@ function saveCachedState() {
         cars: state.cars,
         members: state.members,
         reservations: state.reservations,
+        users: state.users,
+        plans: state.plans,
+        profile: state.profile,
+        tickets: state.tickets,
+        carpools: state.carpools,
+        myApplications: state.myApplications,
+        keyDevices: state.keyDevices,
+        digitalKeys: state.digitalKeys,
+        masterKeys: state.masterKeys,
         currentUser: state.currentUser,
         savedAt: Date.now(),
       })
@@ -157,9 +213,18 @@ function clearCachedState() {
 }
 
 function applyState(data) {
-  state.cars = data.cars;
-  state.members = data.members;
-  state.reservations = data.reservations;
+  state.cars = data.cars || [];
+  state.members = data.members || [];
+  state.reservations = data.reservations || [];
+  state.users = data.users || [];
+  state.plans = data.plans || [];
+  state.profile = data.profile || state.profile;
+  state.tickets = data.tickets || [];
+  state.carpools = data.carpools || [];
+  state.myApplications = data.my_applications ?? data.myApplications ?? [];
+  state.keyDevices = data.key_devices ?? data.keyDevices ?? [];
+  state.digitalKeys = data.digital_keys ?? data.digitalKeys ?? [];
+  state.masterKeys = data.master_keys ?? data.masterKeys ?? [];
   if (data.currentUser) {
     state.currentUser = data.currentUser;
   }
@@ -171,6 +236,11 @@ function renderAll() {
   renderHome();
   renderReservationLists();
   renderSettings();
+  renderPlanCard();
+  renderBillingCard();
+  renderCarpools();
+  renderKeyDevices();
+  renderMasterKeyPanel();
   applyRoleUI();
 }
 
@@ -235,6 +305,75 @@ function toLocalInput(date) {
   return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(
     date.getHours()
   )}:${pad(date.getMinutes())}`;
+}
+
+function formatYen(amount) {
+  return `${Number(amount || 0).toLocaleString('ja-JP')}円`;
+}
+
+function currentMonthKey() {
+  const now = new Date();
+  return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+}
+
+function planByCode(code) {
+  return state.plans.find((plan) => plan.code === code) || null;
+}
+
+function planLabel(code) {
+  const plan = planByCode(code);
+  return plan ? plan.name : code === 'none' ? '時間券のみ' : code;
+}
+
+function ticketSourceLabel(source) {
+  return (
+    {
+      included: 'プラン付属',
+      pack: '6時間パック',
+      extra: '追加券',
+    }[source] || source
+  );
+}
+
+function ticketStatusLabel(status) {
+  return (
+    {
+      available: '利用可能',
+      reserved: '予約済み',
+      used: '利用済み',
+      expired: '期限切れ',
+    }[status] || status
+  );
+}
+
+function keyStatusLabel(status) {
+  return (
+    {
+      scheduled: '発行待ち',
+      pending: '発行中',
+      issued: '発行済み',
+      failed: '発行失敗',
+      revoked: '失効',
+      revoke_failed: '失効失敗',
+      expired: '期限切れ',
+    }[status] || status
+  );
+}
+
+function formatDateOnly(value) {
+  const date = new Date(value);
+  return `${date.getFullYear()}/${date.getMonth() + 1}/${date.getDate()}`;
+}
+
+function selectOptions(items, selectedValue, labeler, valueGetter = (item) => item.id) {
+  return items
+    .map((item) => {
+      const value = valueGetter(item);
+      const selected =
+        String(value) === String(selectedValue) ? ' selected' : '';
+      return `<option value="${esc(value)}"${selected}>${esc(labeler(item))}</option>`;
+    })
+    .join('');
 }
 
 let toastTimer = null;
@@ -389,7 +528,21 @@ async function logout() {
   state.members = [];
   state.reservations = [];
   state.users = [];
+  state.plans = [];
+  state.profile = null;
+  state.tickets = [];
+  state.carpools = [];
+  state.myApplications = [];
+  state.keyDevices = [];
+  state.digitalKeys = [];
+  state.masterKeys = [];
+  state.billing = null;
+  state.billingUserId = '';
+  state.reservationOptions = null;
+  state.selectedPaymentType = 'time';
   state.currentUser = null;
+  billingError = '';
+  keyAuditLoaded = false;
   switchTab('home');
   showLogin();
   toast('ログアウトしました');
@@ -398,11 +551,26 @@ async function logout() {
 async function loadAll() {
   try {
     const data = await apiFetch('/state/');
+    if (!data) throw new Error('状態を取得できませんでした');
 
-    state.cars = data.cars;
-    state.members = data.members;
-    state.reservations = data.reservations;
+    state.cars = data.cars || [];
+    state.members = data.members || [];
+    state.reservations = data.reservations || [];
     state.users = data.users || [];
+    state.plans = data.plans || [];
+    state.profile = data.profile || null;
+    state.tickets = data.tickets || [];
+    state.carpools = data.carpools || [];
+    state.myApplications = data.my_applications || [];
+    state.keyDevices = data.key_devices || [];
+    state.digitalKeys = data.digital_keys || [];
+    state.masterKeys = data.master_keys || [];
+    if (data.profile) {
+      state.currentUser = { ...(state.currentUser || {}), ...data.profile };
+    }
+    state.billing = null;
+    billingError = '';
+    keyAuditLoaded = false;
 
     renderAll();
     saveCachedState();
@@ -477,18 +645,7 @@ function renderSelects() {
     els.reserveMember.value = selectedMember;
   }
 
-  const noCars = state.cars.length === 0;
-  const noMembers = admin ? state.members.length === 0 : !ownMember;
-  els.reserveSubmit.disabled = noCars || noMembers;
-  els.reserveSubmit.textContent = noCars
-    ? admin
-      ? '先に車を登録してください'
-      : '管理者に車の登録を依頼してください'
-    : noMembers
-      ? admin
-        ? '先に住人を登録してください'
-        : '管理者に住人の紐付けを依頼してください'
-      : '予約する';
+  updateReserveSubmitState();
 }
 
 function emptyState(message) {
@@ -524,12 +681,12 @@ function renderHome() {
 
         let detail;
         if (current) {
-          detail = `<strong>${esc(current.member.name)}</strong> が利用中<br>${esc(
+          detail = `<strong>${esc(current.member?.name || '住人')}</strong> が利用中<br>${esc(
             formatRange(current.start_time, current.end_time)
           )}`;
         } else if (next) {
           detail = `次の予約：${esc(formatDateTime(next.start_time))}<br>利用者：<strong>${esc(
-            next.member.name
+            next.member?.name || '住人'
           )}</strong>`;
         } else {
           detail = '予約はありません';
@@ -540,7 +697,9 @@ function renderHome() {
             <div class="car-top">
               <div>
                 <div class="car-name">${esc(car.name)}</div>
-                <div class="car-meta">${esc(car.color)} / ${esc(car.plate)}</div>
+                <div class="car-meta">${esc(car.color)} / ${esc(car.plate)} / 定員${esc(
+                  car.seat_capacity || 4
+                )}人${car.key_supported ? ' / デジタルキー対応' : ''}</div>
               </div>
               <span class="badge ${current ? 'badge--busy' : 'badge--free'}">${
                 current ? '使用中' : '空き'
@@ -578,12 +737,27 @@ function reservationCard(reservation, showActions) {
       ? `<button class="btn btn-danger btn-small" type="button" data-action="cancel-reservation" data-id="${reservation.id}">キャンセル</button>`
       : '';
 
+  const charge = reservation.charge;
+  const chargeLine = charge
+    ? `<div class="reservation-meta">${
+        charge.payment_type === 'ticket' ? '6時間券' : '時間券'
+      } / 今回の負担 ${formatYen(charge.actual_burden)}</div>`
+    : '';
+  const key = reservation.digital_key;
+  const keyLine = key
+    ? `<div class="reservation-meta reservation-meta--key">デジタルキー: ${esc(
+        keyStatusLabel(key.status)
+      )}（${esc(formatDateTime(key.valid_from))} 〜 ${esc(
+        timeFormatter.format(new Date(key.valid_to))
+      )}）</div>`
+    : '';
+
   return `
     <article class="reservation-card">
       <div class="reservation-main">
         <div class="reservation-title">
-          ${esc(reservation.car.name)}
-          <span class="chip">${esc(reservation.member.name)}</span>
+          ${esc(reservation.car?.name || '車')}
+          <span class="chip">${esc(reservation.member?.name || '住人')}</span>
         </div>
         <div class="reservation-time">${esc(
           formatRange(reservation.start_time, reservation.end_time)
@@ -593,6 +767,8 @@ function reservationCard(reservation, showActions) {
             ? `<div class="reservation-note">${esc(reservation.note)}</div>`
             : ''
         }
+        ${chargeLine}
+        ${keyLine}
       </div>
       ${cancelButton ? `<div class="reservation-actions">${cancelButton}</div>` : ''}
     </article>
@@ -651,7 +827,7 @@ function renderCalendar() {
       const own = reservation.member_id === state.currentUser?.member_id;
       return `<span class="calendar-chip ${own ? 'is-own' : ''}">${esc(
         timeLabel
-      )} ${esc(reservation.car.name)}</span>`;
+      )} ${esc(reservation.car?.name || '車')}</span>`;
     });
     if (dayReservations.length > 3) {
       chips.push(
@@ -716,7 +892,9 @@ function renderSettings() {
             <div class="setting-row">
               <div class="setting-info">
                 <strong>${esc(car.name)}</strong>
-                <span>${esc(car.color)} / ${esc(car.plate)}</span>
+                <span>${esc(car.color)} / ${esc(car.plate)} / 定員${esc(
+                  car.seat_capacity || 4
+                )}人${car.key_supported ? ' / キー対応' : ''}</span>
               </div>
               <div class="setting-actions">
                 <button class="icon-btn" type="button" data-action="edit-car" data-id="${
@@ -774,13 +952,20 @@ function renderSettings() {
           const memberLabel = user.member_name
             ? esc(user.member_name)
             : '住人の紐付けなし';
+          const genderLabel =
+            { male: '男性', female: '女性' }[user.gender] || '性別未設定';
           return `
             <div class="setting-row">
               <div class="setting-info">
                 <strong>${esc(user.username)}</strong>
-                <span><span class="role-badge role-badge--${user.role}">${roleLabel}</span> ${memberLabel}</span>
+                <span><span class="role-badge role-badge--${user.role}">${roleLabel}</span> ${memberLabel} / ${esc(
+                  planLabel(user.plan)
+                )} / ${genderLabel}</span>
               </div>
               <div class="setting-actions">
+                <button class="btn btn-ghost btn-small" type="button" data-action="grant-ticket" data-id="${
+                  user.id
+                }">券付与</button>
                 <button class="icon-btn" type="button" data-action="edit-user" data-id="${
                   user.id
                 }" aria-label="${esc(user.username)}を編集">${editIcon}</button>
@@ -793,6 +978,815 @@ function renderSettings() {
         })
         .join('')
     : emptyState('ユーザーが登録されていません');
+}
+
+let optionTimer = null;
+let billingLoading = false;
+let billingError = '';
+let keyAuditLoaded = false;
+
+function renderPlanCard() {
+  if (!els.planCard) return;
+  const profile = state.profile || state.currentUser || {};
+  const plan = planByCode(profile.plan) || {
+    name: '時間券のみ',
+    monthly_fee: 0,
+    included_tickets: 0,
+    carry_over: false,
+  };
+  const tickets = Array.isArray(state.tickets) ? state.tickets : [];
+  const available = tickets.filter(
+    (ticket) => ticket.status === 'available'
+  );
+  const ticketRows = tickets.length
+    ? tickets
+        .slice(0, 8)
+        .map(
+          (ticket) => `
+            <div class="ticket-row">
+              <span>${esc(ticketSourceLabel(ticket.source))} #${esc(ticket.slot)}</span>
+              <span>${esc(ticketStatusLabel(ticket.status))}</span>
+              <small>${formatDateOnly(ticket.expires_at)}まで</small>
+            </div>
+          `
+        )
+        .join('')
+    : '<p class="form-hint">利用できる6時間券はありません。管理者から付与できます。</p>';
+
+  els.planCard.innerHTML = `
+    <div class="section-head">
+      <h2>料金プラン</h2>
+      <span class="chip">${esc(plan.name)}</span>
+    </div>
+    <div class="stat-row"><span>月額</span><strong>${formatYen(plan.monthly_fee)}</strong></div>
+    <div class="stat-row"><span>付属6時間券</span><strong>${esc(plan.included_tickets)}枚 / 月</strong></div>
+    <div class="stat-row"><span>利用可能な券</span><strong>${available.length}枚</strong></div>
+    <p class="form-hint">券は発行月の翌月末まで有効です。</p>
+    <div class="ticket-list">${ticketRows}</div>
+    <div class="form-actions">
+      <button class="btn btn-ghost btn-small" type="button" data-action="purchase-pack">6時間パックを購入（4,200円）</button>
+      <button class="btn btn-ghost btn-small" type="button" data-action="purchase-extra">追加6時間券を購入（3,800円）</button>
+    </div>
+    <div class="section-head section-head--spaced">
+      <h2>プラン・プロフィール</h2>
+    </div>
+    <div class="inline-controls">
+      <select id="selfPlan">
+        ${selectOptions(state.plans || [], profile.plan || 'none', (item) => `${item.name}（${formatYen(item.monthly_fee)}/月）`, (item) => item.code)}
+      </select>
+      <button class="btn btn-ghost btn-small" type="button" data-action="change-plan">プラン変更</button>
+    </div>
+    <div class="inline-controls">
+      <select id="selfGender">
+        <option value="">性別未設定</option>
+        <option value="male" ${profile.gender === 'male' ? 'selected' : ''}>男性</option>
+        <option value="female" ${profile.gender === 'female' ? 'selected' : ''}>女性</option>
+      </select>
+      <input id="selfRecipient" type="text" placeholder="キー受取人ID（任意）" value="${esc(profile.provider_recipient_id || '')}">
+      <button class="btn btn-ghost btn-small" type="button" data-action="save-profile">保存</button>
+    </div>
+    <p class="form-hint">性別は相乗りの同性フィルターに使います。キー受取人IDはモックキー事業者への送信IDです。</p>
+  `;
+}
+
+function renderBillingCard() {
+  if (!els.billingCard) return;
+  const month = state.billing?.month || currentMonthKey();
+  const data = state.billing;
+  const summary = data
+    ? `
+      <div class="stat-row"><span>プラン月額</span><strong>${formatYen(data.plan_fee)}</strong></div>
+      <div class="stat-row"><span>券の購入</span><strong>${formatYen(data.ticket_purchases)}</strong></div>
+      <div class="stat-row"><span>利用料</span><strong>${formatYen(data.usage_charges)}</strong></div>
+      <div class="stat-row"><span>相乗り席代</span><strong>${formatYen(data.carpool_seat_fees_paid)}</strong></div>
+      <div class="stat-row"><span>相乗り値引き</span><strong>-${formatYen(data.carpool_discount_received)}</strong></div>
+      <div class="stat-row stat-row--total"><span>合計</span><strong>${formatYen(data.total)}</strong></div>
+    `
+    : billingError
+      ? `<div class="empty">${esc(billingError)}</div>`
+      : '<div class="empty">読み込み中...</div>';
+
+  const entries = data?.entries?.length
+    ? data.entries
+        .slice(0, 12)
+        .map(
+          (entry) => `
+            <div class="billing-row">
+              <div><strong>${esc(entry.description)}</strong><small>${esc(entry.date)}</small></div>
+              <span>${entry.amount < 0 ? '-' : ''}${formatYen(Math.abs(entry.amount))}</span>
+            </div>
+          `
+        )
+        .join('')
+    : '';
+
+  const users = Array.isArray(state.users) ? state.users : [];
+  const userSelect = isAdmin()
+    ? `<select id="billingUser">
+        <option value="">自分</option>
+        ${users
+          .map(
+            (user) =>
+              `<option value="${user.id}" ${
+                String(user.id) === String(state.billingUserId)
+                  ? 'selected'
+                  : ''
+              }>${esc(user.username)}</option>`
+          )
+          .join('')}
+      </select>`
+    : '';
+
+  els.billingCard.innerHTML = `
+    <div class="section-head">
+      <h2>月別利用額</h2>
+    </div>
+    <div class="inline-controls">
+      ${userSelect}
+      <input id="billingMonth" type="month" value="${esc(month)}">
+      <button id="billingRefreshBtn" class="btn btn-ghost btn-small" type="button">表示</button>
+    </div>
+    <div class="billing-summary">${summary}</div>
+    ${entries ? `<div class="billing-entries">${entries}</div>` : ''}
+  `;
+
+  $('#billingRefreshBtn')?.addEventListener('click', () => {
+    loadBilling($('#billingMonth')?.value || currentMonthKey());
+  });
+  $('#billingUser')?.addEventListener('change', (event) => {
+    state.billingUserId = event.target.value;
+    state.billing = null;
+    billingError = '';
+    renderBillingCard();
+  });
+
+  if (!data && !billingError && !billingLoading) {
+    void loadBilling(month);
+  }
+}
+
+async function loadBilling(month) {
+  if (billingLoading) return;
+  billingLoading = true;
+  billingError = '';
+  try {
+    const path = state.billingUserId
+      ? `/billing/users/${state.billingUserId}?month=${encodeURIComponent(month)}`
+      : `/billing/me?month=${encodeURIComponent(month)}`;
+    const data = await apiFetch(path);
+    if (!data) throw new Error('利用額を取得できませんでした');
+    state.billing = data;
+  } catch (error) {
+    billingError = error.message;
+  } finally {
+    billingLoading = false;
+    renderBillingCard();
+  }
+}
+
+function renderReservationOptions(data) {
+  if (!els.reservationOptions) return;
+  if (!data || !Array.isArray(data.options)) {
+    els.reservationOptions.innerHTML = '';
+    els.reservationOptionsHint.textContent =
+      '料金情報を取得できませんでした。もう一度お試しください。';
+    updateReserveSubmitState();
+    return;
+  }
+  if (data.blocked_reason) {
+    els.reservationOptions.innerHTML = '';
+    els.reservationOptionsHint.textContent = data.blocked_reason;
+    updateReserveSubmitState();
+    return;
+  }
+
+  if (!data.options.length) {
+    els.reservationOptions.innerHTML = '';
+    els.reservationOptionsHint.textContent = 'この日時は予約できません。';
+    updateReserveSubmitState();
+    return;
+  }
+
+  const validSelected = data.options.some(
+    (option) => option.type === state.selectedPaymentType
+  );
+  if (!validSelected) {
+    state.selectedPaymentType = data.options.some(
+      (option) => option.type === 'time'
+    )
+      ? 'time'
+      : data.options[0].type;
+  }
+
+  els.reservationOptions.innerHTML = data.options
+    .map((option) => {
+      const title =
+        option.type === 'ticket'
+          ? `6時間券を使う（${ticketSourceLabel(option.ticket_source)}）`
+          : '時間券（1時間700円）';
+      const detail =
+        option.type === 'ticket'
+          ? `今回の追加支払い ${formatYen(option.total)}${
+              option.ticket_expires_at
+                ? ` / 券の期限 ${formatDateOnly(option.ticket_expires_at)}`
+                : ''
+            }`
+          : `今回の支払い ${formatYen(option.total)}`;
+      return `
+        <label class="option-card">
+          <input type="radio" name="payment_type" value="${option.type}" ${
+            option.type === state.selectedPaymentType ? 'checked' : ''
+          }>
+          <span>
+            <strong>${esc(title)}</strong>
+            <small>${esc(detail)}</small>
+          </span>
+        </label>
+      `;
+    })
+    .join('');
+  els.reservationOptionsHint.textContent = data.hours
+    ? `利用時間 ${data.hours}時間 / ${
+        data.options.length > 1
+          ? '券と時間券の両方が使えます'
+          : '利用できる支払い方法は1つです'
+      }`
+    : '';
+  updateReserveSubmitState();
+}
+
+function updateReserveSubmitState() {
+  const admin = isAdmin();
+  const ownMember = state.members.find(
+    (member) => member.id === state.currentUser?.member_id
+  );
+  const noCars = state.cars.length === 0;
+  const noMembers = admin ? state.members.length === 0 : !ownMember;
+  const options = state.reservationOptions;
+  const blocked = Boolean(options?.blocked_reason);
+  const noOptions = Boolean(options && Array.isArray(options.options) && options.options.length === 0);
+
+  els.reserveSubmit.disabled = noCars || noMembers || blocked || noOptions;
+  if (blocked) {
+    els.reserveSubmit.textContent = 'この日時は予約できません';
+  } else if (noOptions) {
+    els.reserveSubmit.textContent = '支払い方法がありません';
+  } else if (noCars) {
+    els.reserveSubmit.textContent = admin
+      ? '先に車を登録してください'
+      : '管理者に車の登録を依頼してください';
+  } else if (noMembers) {
+    els.reserveSubmit.textContent = admin
+      ? '先に住人を登録してください'
+      : '管理者に住人の紐付けを依頼してください';
+  } else {
+    els.reserveSubmit.textContent = '予約する';
+  }
+}
+
+async function refreshReservationOptions(silent = false) {
+  const carId = Number(els.reserveCar.value);
+  const memberId = Number(els.reserveMember.value);
+  const start = els.startTime.value;
+  const end = els.endTime.value;
+  const requestId = ++state.optionRequestId;
+
+  if (!carId || !memberId || !start || !end) {
+    state.reservationOptions = null;
+    if (els.reservationOptions) {
+      els.reservationOptions.innerHTML =
+        '<p class="form-hint">車・利用者・日時を選ぶと料金が表示されます。</p>';
+    }
+    els.reservationOptionsHint.textContent = '';
+    updateReserveSubmitState();
+    return;
+  }
+
+  if (!silent) {
+    els.reservationOptionsHint.textContent = '料金を計算しています...';
+  }
+
+  try {
+    const data = await apiFetch('/reservations/options', {
+      method: 'POST',
+      body: JSON.stringify({
+        car_id: carId,
+        member_id: memberId,
+        start_time: start,
+        end_time: end,
+      }),
+    });
+    if (requestId !== state.optionRequestId) return;
+    state.reservationOptions = data;
+    renderReservationOptions(data);
+  } catch (error) {
+    if (requestId !== state.optionRequestId) return;
+    state.reservationOptions = null;
+    if (els.reservationOptions) els.reservationOptions.innerHTML = '';
+    els.reservationOptionsHint.textContent = error.message;
+    updateReserveSubmitState();
+  }
+}
+
+function scheduleOptionsRefresh() {
+  clearTimeout(optionTimer);
+  optionTimer = setTimeout(() => {
+    void refreshReservationOptions(true);
+  }, 350);
+}
+
+function carpoolCard(ride) {
+  const admin = isAdmin();
+  const isDriver = ride.driver_user_id === state.currentUser?.id;
+  const applicationsList = Array.isArray(ride.applications)
+    ? ride.applications
+    : [];
+  const myApplication = applicationsList.find(
+    (application) =>
+      application.applicant_user_id === state.currentUser?.id
+  );
+  const statusLabel =
+    {
+      open: '受付中',
+      full: '満席',
+      closed: '締切',
+      cancelled: '中止',
+    }[ride.status] || ride.status;
+  const statusClass =
+    ride.status === 'open'
+      ? 'badge--free'
+      : ride.status === 'cancelled'
+        ? 'badge--busy'
+        : 'badge--busy';
+  const areaLabel = ride.area === 'far' ? '郊外' : '近場';
+  const genderLabel =
+    { any: '指定なし', male: '男性のみ', female: '女性のみ' }[
+      ride.gender_filter
+    ] || ride.gender_filter;
+
+  const applications =
+    isDriver || admin
+      ? applicationsList
+          .map(
+            (application) => `
+              <div class="carpool-application">
+                <div>
+                  <strong>${esc(application.applicant_name || '利用者')}</strong>
+                  <small>${esc(application.status)} / ${formatYen(
+                    application.seat_fee
+                  )}</small>
+                </div>
+                ${
+                  application.status === 'pending'
+                    ? `<div class="setting-actions">
+                        <button class="btn btn-primary btn-small" type="button" data-action="approve-application" data-id="${ride.id}" data-application-id="${application.id}">承認</button>
+                        <button class="btn btn-ghost btn-small" type="button" data-action="reject-application" data-id="${ride.id}" data-application-id="${application.id}">却下</button>
+                      </div>`
+                    : ''
+                }
+              </div>
+            `
+          )
+          .join('')
+      : '';
+
+  let actionButtons = '';
+  if (isDriver || admin) {
+    if (ride.status !== 'cancelled') {
+      actionButtons = `<button class="btn btn-danger btn-small" type="button" data-action="cancel-carpool" data-id="${ride.id}">募集を中止</button>`;
+    }
+  } else if (ride.status === 'open' && !myApplication) {
+    actionButtons = `<button class="btn btn-primary btn-small" type="button" data-action="apply-carpool" data-id="${ride.id}">申し込む</button>`;
+  } else if (
+    myApplication &&
+    ['pending', 'accepted'].includes(myApplication.status)
+  ) {
+    actionButtons = `
+      <span class="chip">${myApplication.status === 'pending' ? '申請中' : '参加確定'}</span>
+      <button class="btn btn-ghost btn-small" type="button" data-action="cancel-application" data-id="${ride.id}">取り消す</button>
+    `;
+  } else if (ride.remaining_seats > 0 && ride.status === 'open') {
+    actionButtons = `<button class="btn btn-primary btn-small" type="button" data-action="apply-carpool" data-id="${ride.id}">申し込む</button>`;
+  }
+
+  return `
+    <article class="carpool-card">
+      <div class="carpool-top">
+        <div>
+          <strong>${esc(ride.car_name || '車')}</strong>
+          <span class="chip">運転手: ${esc(ride.driver_name || '不明')}</span>
+        </div>
+        <span class="badge ${statusClass}">${esc(statusLabel)}</span>
+      </div>
+      <div class="reservation-time">${esc(
+        formatRange(ride.start_time, ride.end_time)
+      )}</div>
+      <div class="carpool-meta">${esc(areaLabel)} / ${formatYen(
+        ride.seat_fee
+      )} / 残り${esc(ride.remaining_seats)}席 / ${esc(genderLabel)}</div>
+      ${ride.note ? `<div class="reservation-note">${esc(ride.note)}</div>` : ''}
+      ${applications ? `<div class="carpool-applications">${applications}</div>` : ''}
+      ${actionButtons ? `<div class="reservation-actions">${actionButtons}</div>` : ''}
+    </article>
+  `;
+}
+
+function renderCarpools() {
+  if (!els.carpoolList) return;
+  const now = Date.now();
+  const admin = isAdmin();
+  const ownMemberId = state.currentUser?.member_id;
+  const rides = Array.isArray(state.carpools) ? state.carpools : [];
+  const reservations = Array.isArray(state.reservations)
+    ? state.reservations
+    : [];
+  const usedReservationIds = new Set(
+    rides.map((ride) => ride.reservation_id)
+  );
+  const candidates = reservations.filter(
+    (reservation) =>
+      new Date(reservation.end_time).getTime() > now &&
+      !usedReservationIds.has(reservation.id) &&
+      (admin || reservation.member_id === ownMemberId)
+  );
+  const selected = els.carpoolReservation.value;
+  els.carpoolReservation.innerHTML = candidates.length
+    ? candidates
+        .map(
+          (reservation) =>
+            `<option value="${reservation.id}">${esc(
+              formatRange(reservation.start_time, reservation.end_time)
+            )} / ${esc(reservation.car.name)}</option>`
+        )
+        .join('')
+    : '<option value="">募集できる予約がありません</option>';
+  if (candidates.some((reservation) => String(reservation.id) === selected)) {
+    els.carpoolReservation.value = selected;
+  }
+
+  els.carpoolList.innerHTML = rides.length
+    ? rides.map(carpoolCard).join('')
+    : emptyState('相乗り募集はありません');
+}
+
+function renderKeyDevices() {
+  if (!els.keyDeviceList) return;
+  const selectedCar = els.keyDeviceCar.value;
+  const cars = Array.isArray(state.cars) ? state.cars : [];
+  const devices = Array.isArray(state.keyDevices) ? state.keyDevices : [];
+  els.keyDeviceCar.innerHTML = cars.length
+    ? selectOptions(cars, selectedCar, (car) => car.name)
+    : '<option value="">車がありません</option>';
+
+  els.keyDeviceList.innerHTML = devices.length
+    ? devices
+        .map(
+          (device) => `
+            <div class="setting-row">
+              <div class="setting-info">
+                <strong>${esc(device.car_name || '車')}</strong>
+                <span>${esc(device.provider)} / ${esc(
+                  device.provider_device_id
+                )} / ${esc(device.status)}${
+                  device.last_synced_at
+                    ? ` / 同期 ${esc(formatDateTime(device.last_synced_at))}`
+                    : ''
+                }</span>
+              </div>
+              <div class="setting-actions">
+                <button class="btn btn-ghost btn-small" type="button" data-action="sync-key-device" data-id="${device.id}">同期</button>
+                <button class="btn btn-danger btn-small" type="button" data-action="deactivate-key-device" data-id="${device.id}">停止</button>
+              </div>
+            </div>
+          `
+        )
+        .join('')
+    : emptyState('キーボックスは未登録です');
+}
+
+function renderMasterKeyPanel() {
+  if (!els.masterKeyList) return;
+  if (!isAdmin()) {
+    els.masterKeyCar.innerHTML = '';
+    els.masterKeyList.innerHTML = '';
+    els.keyAuditList.innerHTML = '';
+    return;
+  }
+  const selectedCar = els.masterKeyCar.value;
+  const cars = Array.isArray(state.cars) ? state.cars : [];
+  const masterKeys = Array.isArray(state.masterKeys) ? state.masterKeys : [];
+  els.masterKeyCar.innerHTML = cars.length
+    ? selectOptions(cars, selectedCar, (car) => car.name)
+    : '<option value="">車がありません</option>';
+
+  els.masterKeyList.innerHTML = masterKeys.length
+    ? masterKeys
+        .slice(0, 8)
+        .map((key) => {
+          const car = cars.find((item) => item.id === key.car_id);
+          return `
+            <div class="setting-row">
+              <div class="setting-info">
+                <strong>${esc(car?.name || `車ID ${key.car_id}`)} / ${esc(
+                  keyStatusLabel(key.status)
+                )}</strong>
+                <span>${esc(formatDateTime(key.valid_from))} 〜 ${esc(
+                  formatDateTime(key.valid_to)
+                )} / ${esc(key.reason || '理由なし')}${
+                  key.was_in_use ? ' / 利用中に発行' : ''
+                }</span>
+              </div>
+              ${
+                key.status !== 'revoked'
+                  ? `<div class="setting-actions"><button class="btn btn-ghost btn-small" type="button" data-action="revoke-key" data-id="${key.id}">失効</button></div>`
+                  : ''
+              }
+            </div>
+          `;
+        })
+        .join('')
+    : emptyState('マスターキーの履歴はありません');
+
+  if (!keyAuditLoaded) {
+    keyAuditLoaded = true;
+    void loadKeyAudit();
+  }
+}
+
+async function loadKeyAudit() {
+  if (!isAdmin() || !els.keyAuditList) return;
+  els.keyAuditList.innerHTML = '<div class="empty">読み込み中...</div>';
+  try {
+    const events =
+      (await apiFetch('/digital-keys/audit?limit=20')) || [];
+    els.keyAuditList.innerHTML = events.length
+      ? events
+          .map(
+            (event) => `
+              <div class="audit-row">
+                <div>
+                  <strong>${esc(event.action)} / ${esc(event.result)}</strong>
+                  <small>${esc(formatDateTime(event.created_at))} / ${
+                    event.actor_name ? esc(event.actor_name) : 'システム'
+                  } / ${esc(event.reason || '理由なし')}</small>
+                </div>
+                <span class="chip">車ID ${esc(event.car_id)}</span>
+              </div>
+            `
+          )
+          .join('')
+      : emptyState('監査ログはありません');
+  } catch (error) {
+    els.keyAuditList.innerHTML = `<div class="empty">${esc(error.message)}</div>`;
+  }
+}
+
+async function purchasePack() {
+  if (!window.confirm('6時間パックを4,200円で購入しますか？')) return;
+  try {
+    await apiFetch('/tickets/purchase', {
+      method: 'POST',
+      body: JSON.stringify({ source: 'pack', count: 1 }),
+    });
+    toast('6時間パックを購入しました');
+    await loadAll();
+  } catch (error) {
+    if (error.message !== 'unauthorized') toast(error.message, true);
+  }
+}
+
+async function purchaseExtraTicket() {
+  if (!window.confirm('追加6時間券を3,800円で購入しますか？')) return;
+  try {
+    await apiFetch('/tickets/purchase', {
+      method: 'POST',
+      body: JSON.stringify({ source: 'extra', count: 1 }),
+    });
+    toast('追加6時間券を購入しました');
+    await loadAll();
+  } catch (error) {
+    if (error.message !== 'unauthorized') toast(error.message, true);
+  }
+}
+
+async function changePlan() {
+  const userId = state.currentUser?.id;
+  const plan = $('#selfPlan')?.value;
+  if (!userId || !plan) return;
+  if (!window.confirm('料金プランを変更しますか？')) return;
+  try {
+    await apiFetch(`/users/${userId}/plan`, {
+      method: 'PUT',
+      body: JSON.stringify({ plan }),
+    });
+    toast('料金プランを変更しました');
+    await loadAll();
+  } catch (error) {
+    if (error.message !== 'unauthorized') toast(error.message, true);
+  }
+}
+
+async function saveMyProfile() {
+  const userId = state.currentUser?.id;
+  if (!userId) return;
+  try {
+    await apiFetch(`/users/${userId}/profile`, {
+      method: 'PUT',
+      body: JSON.stringify({
+        gender: $('#selfGender')?.value || 'unspecified',
+        provider_recipient_id: $('#selfRecipient')?.value.trim() || null,
+      }),
+    });
+    toast('プロフィールを保存しました');
+    await loadAll();
+  } catch (error) {
+    if (error.message !== 'unauthorized') toast(error.message, true);
+  }
+}
+
+async function grantTicket(userId) {
+  const countText = window.prompt('付与する追加6時間券の枚数（1〜10）', '1');
+  if (countText === null) return;
+  const count = Number(countText);
+  if (!Number.isInteger(count) || count < 1 || count > 10) {
+    toast('1〜10の整数を入力してください', true);
+    return;
+  }
+  try {
+    await apiFetch(`/users/${userId}/tickets`, {
+      method: 'POST',
+      body: JSON.stringify({ source: 'extra', count }),
+    });
+    toast('追加6時間券を付与しました');
+    await loadAll();
+  } catch (error) {
+    if (error.message !== 'unauthorized') toast(error.message, true);
+  }
+}
+
+async function applyCarpool(rideId) {
+  try {
+    await apiFetch(`/carpools/${rideId}/apply`, { method: 'POST' });
+    toast('相乗りに申し込みました');
+    await loadAll();
+  } catch (error) {
+    if (error.message !== 'unauthorized') toast(error.message, true);
+  }
+}
+
+async function cancelMyApplication(rideId) {
+  if (!window.confirm('この相乗りの申し込みを取り消しますか？')) return;
+  try {
+    await apiFetch(`/carpools/${rideId}/applications`, { method: 'DELETE' });
+    toast('申し込みを取り消しました');
+    await loadAll();
+  } catch (error) {
+    if (error.message !== 'unauthorized') toast(error.message, true);
+  }
+}
+
+async function approveApplication(rideId, applicationId) {
+  try {
+    await apiFetch(
+      `/carpools/${rideId}/applications/${applicationId}/approve`,
+      { method: 'POST' }
+    );
+    toast('申し込みを承認しました');
+    await loadAll();
+  } catch (error) {
+    if (error.message !== 'unauthorized') toast(error.message, true);
+  }
+}
+
+async function rejectApplication(rideId, applicationId) {
+  try {
+    await apiFetch(
+      `/carpools/${rideId}/applications/${applicationId}/reject`,
+      { method: 'POST' }
+    );
+    toast('申し込みを却下しました');
+    await loadAll();
+  } catch (error) {
+    if (error.message !== 'unauthorized') toast(error.message, true);
+  }
+}
+
+async function cancelCarpool(rideId) {
+  if (!window.confirm('この相乗り募集を中止しますか？')) return;
+  try {
+    await apiFetch(`/carpools/${rideId}`, { method: 'DELETE' });
+    toast('相乗り募集を中止しました');
+    await loadAll();
+  } catch (error) {
+    if (error.message !== 'unauthorized') toast(error.message, true);
+  }
+}
+
+async function syncKeyDevice(deviceId) {
+  try {
+    await apiFetch(`/key-devices/${deviceId}/sync`, { method: 'POST' });
+    toast('キーボックスの状態を同期しました');
+    await loadAll();
+  } catch (error) {
+    if (error.message !== 'unauthorized') toast(error.message, true);
+  }
+}
+
+async function deactivateKeyDevice(deviceId) {
+  if (!window.confirm('このキーボックスを停止しますか？')) return;
+  try {
+    await apiFetch(`/key-devices/${deviceId}`, { method: 'DELETE' });
+    toast('キーボックスを停止しました');
+    await loadAll();
+  } catch (error) {
+    if (error.message !== 'unauthorized') toast(error.message, true);
+  }
+}
+
+async function revokeDigitalKey(keyId) {
+  if (!window.confirm('このデジタルキーを失効しますか？')) return;
+  try {
+    await apiFetch(`/digital-keys/${keyId}/revoke`, { method: 'POST' });
+    toast('デジタルキーを失効しました');
+    await loadAll();
+  } catch (error) {
+    if (error.message !== 'unauthorized') toast(error.message, true);
+  }
+}
+
+async function issueMasterKey() {
+  const carId = Number(els.masterKeyCar.value);
+  const password = els.masterPassword.value;
+  const reason = els.masterReason.value.trim();
+  if (!carId) {
+    toast('車を選択してください', true);
+    return;
+  }
+  if (!password || !reason) {
+    toast('管理者パスワードと理由を入力してください', true);
+    return;
+  }
+  if (!window.confirm('マスターキーを発行しますか？')) return;
+  try {
+    const key = await apiFetch(`/digital-keys/cars/${carId}/master`, {
+      method: 'POST',
+      body: JSON.stringify({
+        password,
+        reason,
+        confirm_in_use: els.masterConfirmInUse.checked,
+      }),
+    });
+    els.masterPassword.value = '';
+    await loadAll();
+    els.masterKeyResult.textContent = `マスターキー: ${keyStatusLabel(
+      key.status
+    )} / ${formatDateTime(key.valid_from)} 〜 ${formatDateTime(
+      key.valid_to
+    )}${key.last_error ? ` / ${key.last_error}` : ''}`;
+    if (key.status === 'issued') {
+      toast('マスターキーを発行しました');
+    } else {
+      toast(`マスターキーの発行に失敗しました: ${key.last_error}`, true);
+    }
+  } catch (error) {
+    if (error.message !== 'unauthorized') toast(error.message, true);
+  }
+}
+
+async function remoteUnlock() {
+  const carId = Number(els.masterKeyCar.value);
+  const password = els.masterPassword.value;
+  const reason = els.masterReason.value.trim();
+  if (!carId) {
+    toast('車を選択してください', true);
+    return;
+  }
+  if (!password || !reason) {
+    toast('管理者パスワードと理由を入力してください', true);
+    return;
+  }
+  if (!window.confirm('遠隔解錠を実行しますか？')) return;
+  try {
+    const result = await apiFetch(
+      `/digital-keys/cars/${carId}/remote-unlock`,
+      {
+        method: 'POST',
+        body: JSON.stringify({
+          password,
+          reason,
+          confirm_in_use: els.masterConfirmInUse.checked,
+        }),
+      }
+    );
+    els.masterPassword.value = '';
+    els.masterKeyResult.textContent = result.ok
+      ? '遠隔解錠を実行しました（モック）'
+      : '遠隔解錠に失敗しました';
+    toast(result.ok ? '遠隔解錠を実行しました' : '遠隔解錠に失敗しました', !result.ok);
+    await loadAll();
+  } catch (error) {
+    if (error.message !== 'unauthorized') toast(error.message, true);
+  }
 }
 
 function switchTab(tab) {
@@ -820,6 +1814,16 @@ function switchTab(tab) {
     renderCalendar();
     renderCalendarDay();
   }
+  if (tab === 'carpool') {
+    renderCarpools();
+  }
+  if (tab === 'home') {
+    renderBillingCard();
+  }
+  if (tab === 'settings') {
+    renderKeyDevices();
+    renderMasterKeyPanel();
+  }
 
   els.pageTitle.textContent = TAB_TITLES[tab];
   window.scrollTo({ top: 0, behavior: 'smooth' });
@@ -843,6 +1847,7 @@ function openCarDialog(carId) {
   els.editCarName.value = car.name;
   els.editCarPlate.value = car.plate;
   els.editCarColor.value = car.color;
+  els.editCarSeatCapacity.value = car.seat_capacity || 4;
   els.carDialog.showModal();
 }
 
@@ -867,6 +1872,9 @@ function openUserDialog(userId) {
     state.members,
     user.member_id ?? ''
   );
+  els.editUserPlan.value = user.plan || 'none';
+  els.editUserGender.value = user.gender || 'unspecified';
+  els.editUserRecipient.value = user.provider_recipient_id || '';
   els.userDialog.showModal();
 }
 
@@ -914,7 +1922,7 @@ async function cancelReservation(reservationId) {
   }
 }
 
-async function handleAction(action, id) {
+async function handleAction(action, id, dataset = {}) {
   switch (action) {
     case 'edit-car':
       openCarDialog(id);
@@ -936,6 +1944,45 @@ async function handleAction(action, id) {
       break;
     case 'cancel-reservation':
       await cancelReservation(id);
+      break;
+    case 'purchase-pack':
+      await purchasePack();
+      break;
+    case 'purchase-extra':
+      await purchaseExtraTicket();
+      break;
+    case 'change-plan':
+      await changePlan();
+      break;
+    case 'save-profile':
+      await saveMyProfile();
+      break;
+    case 'grant-ticket':
+      await grantTicket(id);
+      break;
+    case 'apply-carpool':
+      await applyCarpool(id);
+      break;
+    case 'cancel-application':
+      await cancelMyApplication(id);
+      break;
+    case 'approve-application':
+      await approveApplication(id, Number(dataset.applicationId || 0));
+      break;
+    case 'reject-application':
+      await rejectApplication(id, Number(dataset.applicationId || 0));
+      break;
+    case 'cancel-carpool':
+      await cancelCarpool(id);
+      break;
+    case 'sync-key-device':
+      await syncKeyDevice(id);
+      break;
+    case 'deactivate-key-device':
+      await deactivateKeyDevice(id);
+      break;
+    case 'revoke-key':
+      await revokeDigitalKey(id);
       break;
     default:
       break;
@@ -1030,22 +2077,36 @@ function bindEvents() {
     }
 
     const start = new Date(els.startTime.value);
-    const payload = {
-      car_id: Number(els.reserveCar.value),
-      member_id: Number(els.reserveMember.value),
-      start_time: els.startTime.value,
-      end_time: els.endTime.value,
-      note: els.note.value.trim(),
-    };
-
     const submitButton = els.reservationForm.querySelector('button[type="submit"]');
     submitButton.disabled = true;
     try {
+      await refreshReservationOptions(true);
+      if (state.reservationOptions?.blocked_reason) {
+        toast(state.reservationOptions.blocked_reason, true);
+        return;
+      }
+      if (!state.reservationOptions?.options?.length) {
+        toast('この日時は予約できません', true);
+        return;
+      }
+
+      const payload = {
+        car_id: Number(els.reserveCar.value),
+        member_id: Number(els.reserveMember.value),
+        start_time: els.startTime.value,
+        end_time: els.endTime.value,
+        note: els.note.value.trim(),
+        payment_type: state.selectedPaymentType,
+      };
+
       await apiFetch('/reservations/', {
         method: 'POST',
         body: JSON.stringify(payload),
       });
       els.note.value = '';
+      state.reservationOptions = null;
+      state.selectedPaymentType = 'time';
+      updateReserveSubmitState();
       setDefaultTimes();
       state.calendarCursor = startOfMonth(start);
       state.selectedDate = startOfDay(start);
@@ -1069,6 +2130,19 @@ function bindEvents() {
         new Date(start.getTime() + 60 * 60 * 1000)
       );
     }
+    scheduleOptionsRefresh();
+  });
+
+  els.endTime.addEventListener('change', scheduleOptionsRefresh);
+  els.reserveCar.addEventListener('change', scheduleOptionsRefresh);
+  els.reserveMember.addEventListener('change', scheduleOptionsRefresh);
+  els.refreshOptionsBtn.addEventListener('click', () => {
+    void refreshReservationOptions();
+  });
+  els.reservationOptions.addEventListener('change', (event) => {
+    const input = event.target.closest('input[name="payment_type"]');
+    if (!input) return;
+    state.selectedPaymentType = input.value;
   });
 
   els.carForm.addEventListener('submit', async (event) => {
@@ -1080,6 +2154,7 @@ function bindEvents() {
           name: els.carName.value.trim(),
           plate: els.carPlate.value.trim(),
           color: els.carColor.value.trim(),
+          seat_capacity: Number(els.carSeatCapacity.value) || 4,
         }),
       });
       els.carForm.reset();
@@ -1141,6 +2216,7 @@ function bindEvents() {
           name: els.editCarName.value.trim(),
           plate: els.editCarPlate.value.trim(),
           color: els.editCarColor.value.trim(),
+          seat_capacity: Number(els.editCarSeatCapacity.value) || 4,
         }),
       });
       els.carDialog.close();
@@ -1190,12 +2266,86 @@ function bindEvents() {
         method: 'PUT',
         body: JSON.stringify(payload),
       });
+      await apiFetch(`/users/${userId}/plan`, {
+        method: 'PUT',
+        body: JSON.stringify({ plan: els.editUserPlan.value }),
+      });
+      await apiFetch(`/users/${userId}/profile`, {
+        method: 'PUT',
+        body: JSON.stringify({
+          gender: els.editUserGender.value,
+          provider_recipient_id: els.editUserRecipient.value.trim() || null,
+        }),
+      });
       els.userDialog.close();
       toast('ユーザーを更新しました');
       await loadAll();
     } catch (error) {
       if (error.message !== 'unauthorized') toast(error.message, true);
     }
+  });
+
+  els.carpoolForm.addEventListener('submit', async (event) => {
+    event.preventDefault();
+    const reservationId = Number(els.carpoolReservation.value);
+    if (!reservationId) {
+      toast('対象の予約がありません', true);
+      return;
+    }
+    try {
+      await apiFetch('/carpools/', {
+        method: 'POST',
+        body: JSON.stringify({
+          reservation_id: reservationId,
+          area: els.carpoolArea.value,
+          gender_filter: els.carpoolGender.value,
+          seats_offered: Number(els.carpoolSeats.value) || 1,
+          driver_guest_seats: Number(els.carpoolGuestSeats.value) || 0,
+          note: els.carpoolNote.value.trim(),
+        }),
+      });
+      els.carpoolNote.value = '';
+      toast('相乗り募集を作成しました');
+      await loadAll();
+    } catch (error) {
+      if (error.message !== 'unauthorized') toast(error.message, true);
+    }
+  });
+
+  els.keyDeviceForm.addEventListener('submit', async (event) => {
+    event.preventDefault();
+    const carId = Number(els.keyDeviceCar.value);
+    if (!carId) {
+      toast('車を選択してください', true);
+      return;
+    }
+    try {
+      await apiFetch('/key-devices/', {
+        method: 'POST',
+        body: JSON.stringify({
+          car_id: carId,
+          provider: 'mock',
+          provider_device_id: els.keyDeviceId.value.trim(),
+          display_name: els.keyDeviceName.value.trim(),
+        }),
+      });
+      els.keyDeviceForm.reset();
+      toast('キーボックスを登録しました');
+      await loadAll();
+    } catch (error) {
+      if (error.message !== 'unauthorized') toast(error.message, true);
+    }
+  });
+
+  els.masterKeyBtn.addEventListener('click', () => {
+    void issueMasterKey();
+  });
+  els.remoteUnlockBtn.addEventListener('click', () => {
+    void remoteUnlock();
+  });
+  els.keyAuditRefresh.addEventListener('click', () => {
+    keyAuditLoaded = true;
+    void loadKeyAudit();
   });
 
   document.addEventListener('click', (event) => {
@@ -1213,7 +2363,11 @@ function bindEvents() {
 
     const actionButton = event.target.closest('[data-action]');
     if (actionButton) {
-      void handleAction(actionButton.dataset.action, Number(actionButton.dataset.id));
+      void handleAction(
+        actionButton.dataset.action,
+        Number(actionButton.dataset.id || 0),
+        actionButton.dataset
+      );
       return;
     }
 

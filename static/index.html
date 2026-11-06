@@ -57,6 +57,24 @@
       <path d="M4 7h16M9 7V4h6v3M6 7l1 14h10l1-14"/>
       <path d="M10 11v6M14 11v6"/>
     </symbol>
+    <symbol id="icon-people" viewBox="0 0 24 24">
+      <circle cx="9" cy="8" r="3"/>
+      <path d="M3 20c0-3 2.5-5 6-5s6 2 6 5"/>
+      <path d="M16 8.5a3 3 0 1 1 0 5.5"/>
+      <path d="M17 15c2.5.4 4 2.2 4 5"/>
+    </symbol>
+    <symbol id="icon-key" viewBox="0 0 24 24">
+      <circle cx="8" cy="12" r="4"/>
+      <path d="M12 12h9M17 12v3M20 12v2"/>
+    </symbol>
+    <symbol id="icon-yen" viewBox="0 0 24 24">
+      <path d="M6 4l6 8 6-8"/>
+      <path d="M12 12v8M8 14h8M8 17h8"/>
+    </symbol>
+    <symbol id="icon-ticket" viewBox="0 0 24 24">
+      <path d="M4 7h16v3a2 2 0 0 0 0 4v3H4v-3a2 2 0 0 0 0-4Z"/>
+      <path d="M12 9v6"/>
+    </symbol>
   </svg>
 
   <div id="boot" class="boot-screen">
@@ -109,6 +127,9 @@
         <button class="nav-link" data-tab="list" type="button">
           <svg class="icon"><use href="#icon-list"></use></svg><span>予約一覧</span>
         </button>
+        <button class="nav-link" data-tab="carpool" type="button">
+          <svg class="icon"><use href="#icon-people"></use></svg><span>相乗り</span>
+        </button>
         <button class="nav-link" data-tab="settings" type="button">
           <svg class="icon"><use href="#icon-settings"></use></svg><span>設定</span>
         </button>
@@ -137,6 +158,11 @@
         <section id="panel-home" class="tab-panel">
           <div id="carStatusList" class="car-grid"></div>
 
+          <div class="dashboard-grid">
+            <section id="planCard" class="card"></section>
+            <section id="billingCard" class="card"></section>
+          </div>
+
           <div class="section-head">
             <h2>直近の予約</h2>
             <button class="btn btn-ghost btn-small" data-go-tab="list" type="button">すべて見る</button>
@@ -164,6 +190,16 @@
               <div class="field">
                 <label for="endTime">終了日時</label>
                 <input id="endTime" name="end_time" type="datetime-local" required>
+              </div>
+              <div class="field field--full">
+                <div class="section-head">
+                  <label>支払い方法</label>
+                  <button id="refreshOptionsBtn" class="btn btn-ghost btn-small" type="button">料金を確認</button>
+                </div>
+                <div id="reservationOptions" class="option-list">
+                  <p class="form-hint">車・利用者・日時を選ぶと料金が表示されます。</p>
+                </div>
+                <p id="reservationOptionsHint" class="form-hint"></p>
               </div>
               <div class="field field--full">
                 <label for="note">メモ（任意）</label>
@@ -209,6 +245,55 @@
           <div id="pastList" class="stack"></div>
         </section>
 
+        <section id="panel-carpool" class="tab-panel" hidden>
+          <div class="card form-card">
+            <h2>相乗り募集を出す</h2>
+            <p class="muted">自分の予約に同乗者を募集できます。承認制です。</p>
+            <form id="carpoolForm" class="form-grid">
+              <div class="field field--full">
+                <label for="carpoolReservation">対象の予約</label>
+                <select id="carpoolReservation"></select>
+              </div>
+              <div class="field">
+                <label for="carpoolArea">エリア</label>
+                <select id="carpoolArea">
+                  <option value="near">近場（300円/席）</option>
+                  <option value="far">郊外（500円/席）</option>
+                </select>
+              </div>
+              <div class="field">
+                <label for="carpoolGender">同乗条件</label>
+                <select id="carpoolGender">
+                  <option value="any">指定なし</option>
+                  <option value="male">男性のみ</option>
+                  <option value="female">女性のみ</option>
+                </select>
+              </div>
+              <div class="field">
+                <label for="carpoolSeats">募集人数</label>
+                <input id="carpoolSeats" type="number" min="1" max="9" value="1">
+              </div>
+              <div class="field">
+                <label for="carpoolGuestSeats">外部の同乗者</label>
+                <input id="carpoolGuestSeats" type="number" min="0" max="9" value="0">
+                <p class="form-hint">友人など、アプリを使わない同乗者の人数です。</p>
+              </div>
+              <div class="field field--full">
+                <label for="carpoolNote">メモ（任意）</label>
+                <input id="carpoolNote" type="text" maxlength="500" placeholder="例：駅まで、荷物あり">
+              </div>
+              <div class="form-actions field--full">
+                <button class="btn btn-primary" type="submit">募集する</button>
+              </div>
+            </form>
+          </div>
+
+          <div class="section-head section-head--spaced">
+            <h2>相乗り募集一覧</h2>
+          </div>
+          <div id="carpoolList" class="stack"></div>
+        </section>
+
         <section id="panel-settings" class="tab-panel" hidden>
           <div class="settings-grid">
             <div class="card">
@@ -230,6 +315,10 @@
                 <div class="field">
                   <label for="carColor">色</label>
                   <input id="carColor" name="color" type="text" maxlength="50" placeholder="例：白" required>
+                </div>
+                <div class="field">
+                  <label for="carSeatCapacity">定員（運転手を含む）</label>
+                  <input id="carSeatCapacity" name="seat_capacity" type="number" min="1" max="10" value="4" required>
                 </div>
                 <button class="btn btn-primary" type="submit">追加する</button>
               </form>
@@ -285,6 +374,70 @@
                 <button class="btn btn-primary" type="submit">追加する</button>
               </form>
             </div>
+
+            <div class="card">
+              <div class="section-head">
+                <h2>デジタルキー</h2>
+              </div>
+              <p class="muted">モックプロバイダで動作します。実機・ベンダー連携は未接続です。</p>
+              <div id="keyDeviceList" class="stack"></div>
+
+              <form id="keyDeviceForm" class="stack form-inline">
+                <h3>キーボックスを登録</h3>
+                <div class="field">
+                  <label for="keyDeviceCar">車</label>
+                  <select id="keyDeviceCar"></select>
+                </div>
+                <div class="field">
+                  <label for="keyDeviceId">ベンダー端末ID</label>
+                  <input id="keyDeviceId" type="text" maxlength="200" placeholder="例：mock-device-001" required>
+                </div>
+                <div class="field">
+                  <label for="keyDeviceName">表示名（任意）</label>
+                  <input id="keyDeviceName" type="text" maxlength="200" placeholder="例：プリウス用キーボックス">
+                </div>
+                <button class="btn btn-primary" type="submit">登録する</button>
+              </form>
+
+              <div class="form-inline">
+                <h3>マスターキー / 遠隔解錠</h3>
+                <p class="form-hint">マスターキーは10分間有効です。理由と管理者パスワードが必要です。</p>
+                <div class="field">
+                  <label for="masterKeyCar">車</label>
+                  <select id="masterKeyCar"></select>
+                </div>
+                <div class="field">
+                  <label for="masterPassword">管理者パスワード</label>
+                  <input id="masterPassword" type="password" autocomplete="current-password" placeholder="再入力してください" required>
+                </div>
+                <div class="field">
+                  <label for="masterReason">利用理由</label>
+                  <input id="masterReason" type="text" maxlength="500" placeholder="例：点検、閉じ込め対応" required>
+                </div>
+                <label class="checkbox-row">
+                  <input id="masterConfirmInUse" type="checkbox">
+                  <span>利用中でも実行する</span>
+                </label>
+                <div class="form-actions">
+                  <button id="masterKeyBtn" class="btn btn-danger" type="button">マスターキー発行（10分）</button>
+                  <button id="remoteUnlockBtn" class="btn btn-ghost" type="button">遠隔解錠</button>
+                </div>
+                <p id="masterKeyResult" class="form-hint"></p>
+              </div>
+
+              <div class="form-inline">
+                <div class="section-head">
+                  <h3>最近のマスターキー</h3>
+                </div>
+                <div id="masterKeyList" class="stack"></div>
+
+                <div class="section-head section-head--spaced">
+                  <h3>キー監査ログ</h3>
+                  <button id="keyAuditRefresh" class="btn btn-ghost btn-small" type="button">更新</button>
+                </div>
+                <div id="keyAuditList" class="stack"></div>
+              </div>
+            </div>
           </div>
         </section>
       </main>
@@ -299,6 +452,9 @@
       </button>
       <button class="bottom-link" data-tab="list" type="button">
         <svg class="icon"><use href="#icon-list"></use></svg><span>予約一覧</span>
+      </button>
+      <button class="bottom-link" data-tab="carpool" type="button">
+        <svg class="icon"><use href="#icon-people"></use></svg><span>相乗り</span>
       </button>
       <button class="bottom-link" data-tab="settings" type="button">
         <svg class="icon"><use href="#icon-settings"></use></svg><span>設定</span>
@@ -323,6 +479,10 @@
       <div class="field">
         <label for="editCarColor">色</label>
         <input id="editCarColor" type="text" maxlength="50" required>
+      </div>
+      <div class="field">
+        <label for="editCarSeatCapacity">定員（運転手を含む）</label>
+        <input id="editCarSeatCapacity" type="number" min="1" max="10" required>
       </div>
       <div class="dialog-actions">
         <button type="button" class="btn btn-ghost" data-close-dialog="carDialog">キャンセル</button>
@@ -370,6 +530,26 @@
         <select id="editUserMember">
           <option value="">なし</option>
         </select>
+      </div>
+      <div class="field">
+        <label for="editUserPlan">料金プラン</label>
+        <select id="editUserPlan">
+          <option value="none">時間券のみ（0円）</option>
+          <option value="light">ライト（3,900円 / 券1枚）</option>
+          <option value="standard">スタンダード（8,000円 / 券3枚）</option>
+        </select>
+      </div>
+      <div class="field">
+        <label for="editUserGender">性別（相乗り条件）</label>
+        <select id="editUserGender">
+          <option value="unspecified">未設定</option>
+          <option value="male">男性</option>
+          <option value="female">女性</option>
+        </select>
+      </div>
+      <div class="field">
+        <label for="editUserRecipient">キー受取人ID</label>
+        <input id="editUserRecipient" type="text" maxlength="200" placeholder="ベンダー側の受取人ID（モック可）">
       </div>
       <div class="dialog-actions">
         <button type="button" class="btn btn-ghost" data-close-dialog="userDialog">キャンセル</button>
