@@ -281,6 +281,36 @@ button {
   margin-top: auto;
 }
 
+.nav-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 18px;
+  height: 18px;
+  padding: 0 5px;
+  border-radius: 999px;
+  background: #dc2626;
+  color: #fff;
+  font-size: 0.68rem;
+  font-weight: 800;
+  line-height: 1;
+}
+
+.nav-link .nav-badge {
+  margin-left: auto;
+}
+
+.bottom-link__icon {
+  position: relative;
+  display: inline-flex;
+}
+
+.bottom-link .nav-badge {
+  position: absolute;
+  top: -5px;
+  right: -10px;
+}
+
 .main-wrap {
   min-width: 0;
   padding: 30px clamp(20px, 4vw, 48px) 56px;
@@ -894,6 +924,10 @@ select:focus {
   box-shadow: 0 30px 80px rgba(15, 61, 35, 0.25);
 }
 
+.dialog--wide {
+  width: min(580px, calc(100vw - 32px));
+}
+
 .dialog::backdrop {
   background: rgba(10, 35, 23, 0.45);
   backdrop-filter: blur(2px);
@@ -904,6 +938,10 @@ select:focus {
   flex-direction: column;
   gap: 14px;
   padding: 24px;
+}
+
+.dialog .form-grid {
+  margin-top: 0;
 }
 
 .dialog-actions {

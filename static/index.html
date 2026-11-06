@@ -128,7 +128,7 @@
           <svg class="icon"><use href="#icon-list"></use></svg><span>予約一覧</span>
         </button>
         <button class="nav-link" data-tab="carpool" type="button">
-          <svg class="icon"><use href="#icon-people"></use></svg><span>相乗り</span>
+          <svg class="icon"><use href="#icon-people"></use></svg><span>相乗り</span><span class="nav-badge" data-carpool-badge hidden></span>
         </button>
         <button class="nav-link" data-tab="settings" type="button">
           <svg class="icon"><use href="#icon-settings"></use></svg><span>設定</span>
@@ -252,52 +252,12 @@
         </section>
 
         <section id="panel-carpool" class="tab-panel" hidden>
-          <div class="card form-card">
-            <h2>相乗り募集を出す</h2>
-            <p class="muted">自分の予約に同乗者を募集できます。承認制です。</p>
-            <form id="carpoolForm" class="form-grid">
-              <div class="field field--full">
-                <label for="carpoolReservation">対象の予約</label>
-                <select id="carpoolReservation"></select>
-              </div>
-              <div class="field">
-                <label for="carpoolArea">エリア</label>
-                <select id="carpoolArea">
-                  <option value="near">近場（300円/席）</option>
-                  <option value="far">郊外（500円/席）</option>
-                </select>
-              </div>
-              <div class="field">
-                <label for="carpoolGender">同乗条件</label>
-                <select id="carpoolGender">
-                  <option value="any">指定なし</option>
-                  <option value="male">男性のみ</option>
-                  <option value="female">女性のみ</option>
-                </select>
-              </div>
-              <div class="field">
-                <label for="carpoolSeats">募集人数</label>
-                <input id="carpoolSeats" type="number" min="1" max="9" value="1">
-              </div>
-              <div class="field">
-                <label for="carpoolGuestSeats">外部の同乗者</label>
-                <input id="carpoolGuestSeats" type="number" min="0" max="9" value="0">
-                <p class="form-hint">友人など、アプリを使わない同乗者の人数です。</p>
-              </div>
-              <div class="field field--full">
-                <label for="carpoolNote">メモ（任意）</label>
-                <input id="carpoolNote" type="text" maxlength="500" placeholder="例：駅まで、荷物あり">
-              </div>
-              <div class="field field--full">
-                <label class="checkbox-row">
-                  <input id="carpoolNotePublic" type="checkbox">
-                  <span>メモを他の利用者にも公開する</span>
-                </label>
-              </div>
-              <div class="form-actions field--full">
-                <button class="btn btn-primary" type="submit">募集する</button>
-              </div>
-            </form>
+          <div class="section-head">
+            <div>
+              <h2>相乗り募集</h2>
+              <p class="muted">自分の予約に同乗者を募集できます。承認制です。</p>
+            </div>
+            <button id="openCarpoolDialog" class="btn btn-primary btn-small" type="button">募集を出す</button>
           </div>
 
           <div class="section-head section-head--spaced">
@@ -466,7 +426,11 @@
         <svg class="icon"><use href="#icon-list"></use></svg><span>予約一覧</span>
       </button>
       <button class="bottom-link" data-tab="carpool" type="button">
-        <svg class="icon"><use href="#icon-people"></use></svg><span>相乗り</span>
+        <span class="bottom-link__icon">
+          <svg class="icon"><use href="#icon-people"></use></svg>
+          <span class="nav-badge" data-carpool-badge hidden></span>
+        </span>
+        <span>相乗り</span>
       </button>
       <button class="bottom-link" data-tab="settings" type="button">
         <svg class="icon"><use href="#icon-settings"></use></svg><span>設定</span>
@@ -566,6 +530,57 @@
       <div class="dialog-actions">
         <button type="button" class="btn btn-ghost" data-close-dialog="userDialog">キャンセル</button>
         <button type="submit" class="btn btn-primary">保存</button>
+      </div>
+    </form>
+  </dialog>
+
+  <dialog id="carpoolDialog" class="dialog dialog--wide">
+    <form id="carpoolForm">
+      <h2>相乗り募集を出す</h2>
+      <p class="muted">自分の予約に同乗者を募集できます。承認制です。</p>
+      <div class="form-grid">
+        <div class="field field--full">
+          <label for="carpoolReservation">対象の予約</label>
+          <select id="carpoolReservation"></select>
+        </div>
+        <div class="field">
+          <label for="carpoolArea">エリア</label>
+          <select id="carpoolArea">
+            <option value="near">近場（300円/席）</option>
+            <option value="far">郊外（500円/席）</option>
+          </select>
+        </div>
+        <div class="field">
+          <label for="carpoolGender">同乗条件</label>
+          <select id="carpoolGender">
+            <option value="any">指定なし</option>
+            <option value="male">男性のみ</option>
+            <option value="female">女性のみ</option>
+          </select>
+        </div>
+        <div class="field">
+          <label for="carpoolSeats">募集人数</label>
+          <input id="carpoolSeats" type="number" min="1" max="9" value="1">
+        </div>
+        <div class="field">
+          <label for="carpoolGuestSeats">外部の同乗者</label>
+          <input id="carpoolGuestSeats" type="number" min="0" max="9" value="0">
+          <p class="form-hint">友人など、アプリを使わない同乗者の人数です。</p>
+        </div>
+        <div class="field field--full">
+          <label for="carpoolNote">メモ（任意）</label>
+          <input id="carpoolNote" type="text" maxlength="500" placeholder="例：駅まで、荷物あり">
+        </div>
+        <div class="field field--full">
+          <label class="checkbox-row">
+            <input id="carpoolNotePublic" type="checkbox">
+            <span>メモを他の利用者にも公開する</span>
+          </label>
+        </div>
+      </div>
+      <div class="dialog-actions">
+        <button type="button" class="btn btn-ghost" data-close-dialog="carpoolDialog">キャンセル</button>
+        <button type="submit" class="btn btn-primary">募集する</button>
       </div>
     </form>
   </dialog>

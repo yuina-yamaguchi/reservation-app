@@ -2,6 +2,10 @@
 
 const API = '/api';
 const CACHE_KEY = 'reservation-app-state-v4';
+const CARPOOL_SEEN_KEY_PREFIX = 'reservation-app-carpool-seen-v1:';
+const CARPOOL_POLL_MS = 60000;
+let carpoolPollTimer = null;
+let carpoolRefreshPromise = null;
 
 const state = {
   cars: [],
@@ -101,6 +105,8 @@ const els = {
   carpoolNote: $('#carpoolNote'),
   carpoolNotePublic: $('#carpoolNotePublic'),
   carpoolList: $('#carpoolList'),
+  carpoolDialog: $('#carpoolDialog'),
+  openCarpoolDialogBtn: $('#openCarpoolDialog'),
   keyDeviceList: $('#keyDeviceList'),
   keyDeviceForm: $('#keyDeviceForm'),
   keyDeviceCar: $('#keyDeviceCar'),
@@ -362,6 +368,17 @@ function keyStatusLabel(status) {
   );
 }
 
+function applicationStatusLabel(status) {
+  return (
+    {
+      pending: '申請中',
+      accepted: '承認済み',
+      rejected: '見送り',
+      cancelled: 'キャンセル',
+    }[status] || status
+  );
+}
+
 function formatDateOnly(value) {
   const date = new Date(value);
   return `${date.getFullYear()}/${date.getMonth() + 1}/${date.getDate()}`;
@@ -466,6 +483,8 @@ function showLogin(message = '') {
   if (els.carDialog?.open) els.carDialog.close();
   if (els.memberDialog?.open) els.memberDialog.close();
   if (els.userDialog?.open) els.userDialog.close();
+  if (els.carpoolDialog?.open) els.carpoolDialog.close();
+  stopCarpoolPolling();
   state.currentUser = null;
   state.users = [];
   els.app.hidden = true;
@@ -576,6 +595,7 @@ async function loadAll() {
 
     renderAll();
     saveCachedState();
+    startCarpoolPolling();
   } catch (error) {
     if (error.message !== 'unauthorized') {
       const cached = readCachedState();
@@ -1337,9 +1357,9 @@ function carpoolCard(ride) {
               <div class="carpool-application">
                 <div>
                   <strong>${esc(application.applicant_name || '利用者')}</strong>
-                  <small>${esc(application.status)} / ${formatYen(
-                    application.seat_fee
-                  )}</small>
+                  <small>${esc(
+                    applicationStatusLabel(application.status)
+                  )} / ${formatYen(application.seat_fee)}</small>
                 </div>
                 ${
                   application.status === 'pending'
@@ -1369,6 +1389,16 @@ function carpoolCard(ride) {
     actionButtons = `
       <span class="chip">${myApplication.status === 'pending' ? '申請中' : '参加確定'}</span>
       <button class="btn btn-ghost btn-small" type="button" data-action="cancel-application" data-id="${ride.id}">取り消す</button>
+    `;
+  } else if (myApplication?.status === 'rejected') {
+    const canReapply = ride.remaining_seats > 0 && ride.status === 'open';
+    actionButtons = `
+      <span class="chip">見送り</span>
+      ${
+        canReapply
+          ? `<button class="btn btn-primary btn-small" type="button" data-action="apply-carpool" data-id="${ride.id}">再申し込み</button>`
+          : ''
+      }
     `;
   } else if (ride.remaining_seats > 0 && ride.status === 'open') {
     actionButtons = `<button class="btn btn-primary btn-small" type="button" data-action="apply-carpool" data-id="${ride.id}">申し込む</button>`;
@@ -1432,6 +1462,153 @@ function renderCarpools() {
   els.carpoolList.innerHTML = rides.length
     ? rides.map(carpoolCard).join('')
     : emptyState('相乗り募集はありません');
+
+  renderCarpoolBadge();
+  if (
+    state.activeTab === 'carpool' &&
+    document.visibilityState === 'visible'
+  ) {
+    markApplicantCarpoolSeen();
+    renderCarpoolBadge();
+  }
+}
+
+function carpoolSeenKey() {
+  const userId = state.currentUser?.id;
+  return userId ? `${CARPOOL_SEEN_KEY_PREFIX}${userId}` : '';
+}
+
+function readCarpoolSeen() {
+  const key = carpoolSeenKey();
+  if (!key) return {};
+  try {
+    const parsed = JSON.parse(localStorage.getItem(key) || '{}');
+    return parsed && typeof parsed === 'object' ? parsed : {};
+  } catch (_) {
+    return {};
+  }
+}
+
+function writeCarpoolSeen(seen) {
+  const key = carpoolSeenKey();
+  if (!key) return;
+  try {
+    localStorage.setItem(key, JSON.stringify(seen));
+  } catch (_) {
+    // 保存できなくても通知表示は継続する
+  }
+}
+
+function carpoolApplicationSignature(application) {
+  return `${application.status}:${application.decided_at || ''}`;
+}
+
+function carpoolNotificationCount() {
+  const userId = state.currentUser?.id;
+  if (!userId) return 0;
+  const seen = readCarpoolSeen();
+  let count = 0;
+
+  (state.carpools || []).forEach((ride) => {
+    const applications = Array.isArray(ride.applications)
+      ? ride.applications
+      : [];
+    if (ride.driver_user_id === userId) {
+      count += applications.filter(
+        (application) => application.status === 'pending'
+      ).length;
+    }
+
+    const mine = applications.find(
+      (application) => application.applicant_user_id === userId
+    );
+    if (
+      mine &&
+      ['accepted', 'rejected'].includes(mine.status) &&
+      seen[mine.id] !== carpoolApplicationSignature(mine)
+    ) {
+      count += 1;
+    }
+  });
+
+  return count;
+}
+
+function renderCarpoolBadge() {
+  const count = carpoolNotificationCount();
+  $$('[data-carpool-badge]').forEach((badge) => {
+    badge.hidden = count === 0;
+    badge.textContent = count > 9 ? '9+' : String(count);
+    badge.setAttribute('aria-label', `${count}件の相乗り通知`);
+  });
+}
+
+function markApplicantCarpoolSeen() {
+  const userId = state.currentUser?.id;
+  if (!userId) return;
+  const seen = readCarpoolSeen();
+  let changed = false;
+
+  (state.carpools || []).forEach((ride) => {
+    (ride.applications || []).forEach((application) => {
+      if (application.applicant_user_id !== userId) return;
+      if (!['accepted', 'rejected'].includes(application.status)) return;
+      const signature = carpoolApplicationSignature(application);
+      if (seen[application.id] !== signature) {
+        seen[application.id] = signature;
+        changed = true;
+      }
+    });
+  });
+
+  if (changed) writeCarpoolSeen(seen);
+}
+
+async function refreshCarpoolState() {
+  if (!state.currentUser) return;
+  if (carpoolRefreshPromise) return carpoolRefreshPromise;
+
+  carpoolRefreshPromise = (async () => {
+    try {
+      const data = await apiFetch('/carpools/');
+      if (!Array.isArray(data)) return;
+      state.carpools = data;
+      renderCarpools();
+    } catch (error) {
+      if (error.message !== 'unauthorized') {
+        // 自動更新の失敗は静かに無視する
+      }
+    } finally {
+      carpoolRefreshPromise = null;
+    }
+  })();
+
+  return carpoolRefreshPromise;
+}
+
+function startCarpoolPolling() {
+  stopCarpoolPolling();
+  carpoolPollTimer = setInterval(() => {
+    if (document.visibilityState === 'visible') {
+      void refreshCarpoolState();
+    }
+  }, CARPOOL_POLL_MS);
+}
+
+function stopCarpoolPolling() {
+  if (!carpoolPollTimer) return;
+  clearInterval(carpoolPollTimer);
+  carpoolPollTimer = null;
+}
+
+function openCarpoolDialog() {
+  if (!els.carpoolDialog) return;
+  renderCarpools();
+  if (!els.carpoolReservation.value) {
+    toast('募集できる予約がありません', true);
+    return;
+  }
+  els.carpoolDialog.showModal();
 }
 
 function renderKeyDevices() {
@@ -1838,6 +2015,7 @@ function switchTab(tab) {
   }
   if (tab === 'carpool') {
     renderCarpools();
+    void refreshCarpoolState();
   }
   if (tab === 'home') {
     renderBillingCard();
@@ -2312,6 +2490,8 @@ function bindEvents() {
     }
   });
 
+  els.openCarpoolDialogBtn?.addEventListener('click', openCarpoolDialog);
+
   els.carpoolForm.addEventListener('submit', async (event) => {
     event.preventDefault();
     const reservationId = Number(els.carpoolReservation.value);
@@ -2334,6 +2514,7 @@ function bindEvents() {
       });
       els.carpoolNote.value = '';
       els.carpoolNotePublic.checked = false;
+      els.carpoolDialog?.close();
       toast('相乗り募集を作成しました');
       await loadAll();
     } catch (error) {
@@ -2406,10 +2587,18 @@ function bindEvents() {
     }
   });
 
-  [els.carDialog, els.memberDialog, els.userDialog].forEach((dialog) => {
-    dialog.addEventListener('click', (event) => {
-      if (event.target === dialog) dialog.close();
+  [els.carDialog, els.memberDialog, els.userDialog, els.carpoolDialog]
+    .filter(Boolean)
+    .forEach((dialog) => {
+      dialog.addEventListener('click', (event) => {
+        if (event.target === dialog) dialog.close();
+      });
     });
+
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'visible' && state.currentUser) {
+      void refreshCarpoolState();
+    }
   });
 
   window.addEventListener('offline', () => {
