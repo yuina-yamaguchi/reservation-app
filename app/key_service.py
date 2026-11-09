@@ -260,6 +260,65 @@ def schedule_reservation_key(
     return key
 
 
+def backfill_reservation_keys(
+    db: Session,
+    now: datetime | None = None,
+    include_past: bool = False,
+) -> dict[str, int]:
+    now = now or pricing.now_jst()
+    query = db.query(models.Reservation)
+    if not include_past:
+        query = query.filter(models.Reservation.end_time > now)
+    reservations = query.order_by(models.Reservation.start_time).all()
+
+    created = 0
+    updated = 0
+    skipped = 0
+
+    for reservation in reservations:
+        recipient = reservation.charge.ticket_user if reservation.charge else None
+        existing = (
+            db.query(models.DigitalKey)
+            .filter(
+                models.DigitalKey.reservation_id == reservation.id,
+                models.DigitalKey.purpose == "reservation",
+            )
+            .first()
+        )
+
+        if existing is None:
+            key = schedule_reservation_key(db, reservation, recipient, now)
+            if key is None:
+                skipped += 1
+            else:
+                created += 1
+            continue
+
+        valid_from, valid_to = pricing.key_validity(
+            reservation.start_time, reservation.end_time
+        )
+        issue_after = pricing.key_issue_after(reservation.start_time)
+        existing.valid_from = valid_from
+        existing.valid_to = valid_to
+        existing.issue_after = issue_after
+        if recipient is not None and existing.recipient_user_id is None:
+            existing.recipient_user_id = recipient.id
+        if existing.status == "scheduled" and existing.device_id is None:
+            existing.provider_key_id = f"mock-reservation-{existing.id}"
+            existing.status = "issued"
+            existing.issued_at = now
+            existing.last_error = ""
+        updated += 1
+
+    db.commit()
+    return {
+        "targets": len(reservations),
+        "created": created,
+        "updated": updated,
+        "skipped": skipped,
+    }
+
+
 def issue_due(db: Session, now: datetime | None = None) -> dict[str, int]:
     now = now or pricing.now_jst()
 

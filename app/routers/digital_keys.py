@@ -36,6 +36,15 @@ def issue_due_keys(
     return key_service.issue_due(db)
 
 
+@router.post("/backfill-reservation-keys")
+def backfill_reservation_keys(
+    include_past: bool = Query(default=False),
+    db: Session = Depends(get_db),
+    _: models.User = Depends(require_admin),
+):
+    return key_service.backfill_reservation_keys(db, include_past=include_past)
+
+
 @router.get("/admin", response_model=list[schemas.DigitalKeyResponse])
 def admin_keys(
     car_id: int | None = Query(default=None),
