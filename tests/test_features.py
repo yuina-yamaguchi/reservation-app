@@ -248,6 +248,36 @@ def test_reservation_options_and_charge(auth_client):
     assert after_buffer.json()["charge"]["incremental_amount"] == 700
 
 
+def test_long_reservation_options_do_not_error(auth_client):
+    member = create_member(auth_client, "長時間")
+    car = create_car(auth_client, name="長時間車")
+    user = create_user(auth_client, "longstay", member["id"])
+    set_plan(auth_client, user["id"], "light")
+
+    logout(auth_client)
+    login(auth_client, "longstay")
+
+    start = next_weekday(2)
+    data = options(auth_client, car["id"], member["id"], start, hours=8)
+    assert data.status_code == 200
+    by_type = {option["type"]: option for option in data.json()["options"]}
+    assert "ticket_overflow" in by_type
+    assert "time_all" in by_type
+    assert by_type["ticket_overflow"]["overflow_amount"] == 1400
+    assert by_type["time_all"]["total"] == 5600
+
+    created = create_reservation(
+        auth_client,
+        car["id"],
+        member["id"],
+        start,
+        hours=8,
+        payment_type="time_all",
+    )
+    assert created.status_code == 201
+    assert created.json()["charge"]["payment_type"] == "time_all"
+
+
 def test_booking_windows_and_weekend_limit(auth_client):
     member = create_member(auth_client, "山田")
     car = create_car(auth_client)

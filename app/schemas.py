@@ -185,8 +185,13 @@ class ChargeResponse(BaseModel):
     model_config = {"from_attributes": True}
 
 
+ReservationPaymentType = Literal[
+    "ticket", "time", "ticket_2", "ticket_overflow", "time_all"
+]
+
+
 class ReservationOption(BaseModel):
-    type: Literal["ticket", "time"]
+    type: ReservationPaymentType
     label: str
     hours: int
     total: int
@@ -232,7 +237,7 @@ class ReservationCreate(BaseModel):
     end_time: datetime
     note: str = Field(default="", max_length=500)
     note_public: bool = False
-    payment_type: Literal["ticket", "time", "ticket_2"] = "time"
+    payment_type: ReservationPaymentType = "time"
     ticket_user_id: int | None = None
 
     @field_validator("note")
