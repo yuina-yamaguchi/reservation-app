@@ -443,6 +443,38 @@ def test_carpool_hidden_from_list_after_start(auth_client):
     assert ride_id in [item["id"] for item in closed]
 
 
+def test_cancelled_carpool_hidden_from_list(auth_client):
+    car = create_car(auth_client, name="相乗り中止テスト車")
+    member = create_member(auth_client, "相乗り中止")
+    create_user(auth_client, "carpool_cancel", member["id"])
+
+    logout(auth_client)
+    login(auth_client, "carpool_cancel")
+    start = next_weekday(2)
+    reservation = create_reservation(auth_client, car["id"], member["id"], start)
+    assert reservation.status_code == 201
+    ride = auth_client.post(
+        "/api/carpools/",
+        json={
+            "reservation_id": reservation.json()["id"],
+            "area": "near",
+            "gender_filter": "any",
+            "seats_offered": 1,
+        },
+    )
+    assert ride.status_code == 201
+    ride_id = ride.json()["id"]
+
+    cancelled = auth_client.delete(f"/api/carpools/{ride_id}")
+    assert cancelled.status_code == 204
+
+    listed = auth_client.get("/api/carpools/").json()
+    assert ride_id not in [item["id"] for item in listed]
+
+    closed = auth_client.get("/api/carpools/?include_closed=true").json()
+    assert ride_id in [item["id"] for item in closed]
+
+
 def test_notes_are_private_by_default_and_can_be_public(auth_client):
     car = create_car(auth_client, name="秘密車")
     public_car = create_car(auth_client, name="公開車")

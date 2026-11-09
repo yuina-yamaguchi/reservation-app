@@ -1610,7 +1610,10 @@ function renderCarpools() {
   const admin = isAdmin();
   const ownMemberId = state.currentUser?.member_id;
   const rides = (Array.isArray(state.carpools) ? state.carpools : []).filter(
-    (ride) => ride.start_time && new Date(ride.start_time).getTime() > now
+    (ride) =>
+      ride.status !== 'cancelled' &&
+      ride.start_time &&
+      new Date(ride.start_time).getTime() > now
   );
   const reservations = Array.isArray(state.reservations)
     ? state.reservations

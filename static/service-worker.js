@@ -1,6 +1,6 @@
 'use strict';
 
-const CACHE_NAME = 'reservation-app-v17';
+const CACHE_NAME = 'reservation-app-v18';
 const PRECACHE_URLS = [
   '/',
   '/static/app.css',

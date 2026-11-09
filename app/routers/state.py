@@ -69,6 +69,7 @@ def get_state(
     rides = (
         _ride_query(db)
         .filter(
+            models.RideShare.status != "cancelled",
             or_(
                 models.RideShare.status.in_(["open", "full"]),
                 models.RideShare.driver_user_id == current_user.id,

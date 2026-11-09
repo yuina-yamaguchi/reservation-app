@@ -113,6 +113,7 @@ def list_carpools(
             models.RideApplication.applicant_user_id == current_user.id
         )
         query = query.filter(
+            models.RideShare.status != "cancelled",
             or_(
                 models.RideShare.status.in_(["open", "full"]),
                 models.RideShare.driver_user_id == current_user.id,
