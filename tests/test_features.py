@@ -1,6 +1,7 @@
 from datetime import datetime, timedelta
 
-from app import pricing
+from app import models, pricing
+from app.database import SessionLocal
 
 PASSWORD = "password123"
 ADMIN_PASSWORD = "test-password"
@@ -342,6 +343,51 @@ def test_carpool_flow_and_billing(auth_client):
         f"/api/carpools/{ride_id}/applications/{second_id}/approve"
     )
     assert over_cap.status_code == 409
+
+
+def test_carpool_hidden_from_list_after_start(auth_client):
+    car = create_car(auth_client, name="相乗り開始テスト車")
+    member = create_member(auth_client, "相乗り開始")
+    create_user(auth_client, "carpool_start", member["id"])
+
+    logout(auth_client)
+    login(auth_client, "carpool_start")
+    start = next_weekday(2)
+    reservation = create_reservation(auth_client, car["id"], member["id"], start)
+    assert reservation.status_code == 201
+    reservation_id = reservation.json()["id"]
+
+    ride = auth_client.post(
+        "/api/carpools/",
+        json={
+            "reservation_id": reservation_id,
+            "area": "near",
+            "gender_filter": "any",
+            "seats_offered": 1,
+        },
+    )
+    assert ride.status_code == 201
+    ride_id = ride.json()["id"]
+
+    listed = auth_client.get("/api/carpools/").json()
+    assert ride_id in [item["id"] for item in listed]
+
+    past = pricing.now_jst() - timedelta(days=1)
+    with SessionLocal() as db:
+        loaded = (
+            db.query(models.Reservation)
+            .filter(models.Reservation.id == reservation_id)
+            .first()
+        )
+        loaded.start_time = past
+        loaded.end_time = past + timedelta(hours=2)
+        db.commit()
+
+    listed = auth_client.get("/api/carpools/").json()
+    assert ride_id not in [item["id"] for item in listed]
+
+    closed = auth_client.get("/api/carpools/?include_closed=true").json()
+    assert ride_id in [item["id"] for item in closed]
 
 
 def test_notes_are_private_by_default_and_can_be_public(auth_client):

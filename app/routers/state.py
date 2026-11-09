@@ -71,7 +71,10 @@ def get_state(
                 models.RideShare.status.in_(["open", "full"]),
                 models.RideShare.driver_user_id == current_user.id,
                 models.RideShare.id.in_(application_ride_ids),
-            )
+            ),
+            models.RideShare.reservation.has(
+                models.Reservation.start_time > now
+            ),
         )
         .order_by(models.RideShare.id.desc())
         .all()

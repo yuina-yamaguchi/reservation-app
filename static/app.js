@@ -755,6 +755,13 @@ function canCancelReservation(reservation) {
   return reservation.member_id === state.currentUser.member_id;
 }
 
+function isCarpoolRecruiting(rideShare, startTime) {
+  return (
+    rideShare?.status === 'open' &&
+    new Date(startTime).getTime() > Date.now()
+  );
+}
+
 function reservationCard(reservation, showActions) {
   const isUpcoming = new Date(reservation.end_time).getTime() > Date.now();
   const cancelButton =
@@ -780,14 +787,17 @@ function reservationCard(reservation, showActions) {
         timeFormatter.format(new Date(key.valid_to))
       )}）</div>`
     : '';
-  const carpoolBadge =
-    reservation.ride_share?.status === 'open'
-      ? '<span class="carpool-badge carpool-badge--small">相乗り募集中</span>'
-      : '';
+  const carpoolRecruiting = isCarpoolRecruiting(
+    reservation.ride_share,
+    reservation.start_time
+  );
+  const carpoolBadge = carpoolRecruiting
+    ? '<span class="carpool-badge carpool-badge--small">相乗り募集中</span>'
+    : '';
 
   return `
     <article class="reservation-card${
-      reservation.ride_share?.status === 'open' ? ' has-carpool' : ''
+      carpoolRecruiting ? ' has-carpool' : ''
     }" data-action="reservation-detail" data-id="${reservation.id}" data-date="${dateKey(new Date(reservation.start_time))}">
       <div class="reservation-main">
         <div class="reservation-title">
@@ -854,7 +864,11 @@ function renderCalendar() {
     if (key === selectedKey) classes.push('is-selected');
     if (key === dateKey(today)) classes.push('is-today');
     if (dayReservations.length) classes.push('has-reservations');
-    if (dayReservations.some((r) => r.ride_share?.status === 'open')) {
+    if (
+      dayReservations.some((r) =>
+        isCarpoolRecruiting(r.ride_share, r.start_time)
+      )
+    ) {
       classes.push('has-carpool');
     }
 
@@ -864,7 +878,10 @@ function renderCalendar() {
       const timeLabel =
         start < dayStart ? '継続' : timeFormatter.format(start);
       const own = reservation.member_id === state.currentUser?.member_id;
-      const carpool = reservation.ride_share?.status === 'open';
+      const carpool = isCarpoolRecruiting(
+        reservation.ride_share,
+        reservation.start_time
+      );
       return `<span class="calendar-chip ${own ? 'is-own' : ''} ${
         carpool ? 'is-carpool' : ''
       }">${esc(timeLabel)} ${esc(reservation.car?.name || '車')}</span>`;
@@ -1001,10 +1018,9 @@ function renderReservationDayModal(date) {
       keyHtml = `<div class="reservation-detail-meta">キー: ${keyStatusLabel(r.digital_key.status)}</div>`;
     }
 
-    const carpoolBadge =
-      rideShare?.status === 'open'
-        ? '<span class="carpool-badge"><svg class="icon" aria-hidden="true"><use href="#icon-people"></use></svg>相乗り募集中</span>'
-        : '';
+    const carpoolBadge = isCarpoolRecruiting(rideShare, r.start_time)
+      ? '<span class="carpool-badge"><svg class="icon" aria-hidden="true"><use href="#icon-people"></use></svg>相乗り募集中</span>'
+      : '';
 
     const cancelBtn =
       (isOwner || isAdmin()) && !isPast
@@ -1562,7 +1578,9 @@ function renderCarpools() {
   const now = Date.now();
   const admin = isAdmin();
   const ownMemberId = state.currentUser?.member_id;
-  const rides = Array.isArray(state.carpools) ? state.carpools : [];
+  const rides = (Array.isArray(state.carpools) ? state.carpools : []).filter(
+    (ride) => ride.start_time && new Date(ride.start_time).getTime() > now
+  );
   const reservations = Array.isArray(state.reservations)
     ? state.reservations
     : [];

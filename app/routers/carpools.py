@@ -117,7 +117,10 @@ def list_carpools(
                 models.RideShare.status.in_(["open", "full"]),
                 models.RideShare.driver_user_id == current_user.id,
                 models.RideShare.id.in_(application_ride_ids),
-            )
+            ),
+            models.RideShare.reservation.has(
+                models.Reservation.start_time > pricing.now_jst()
+            ),
         )
     rides = query.order_by(models.RideShare.id.desc()).all()
     return [_ride_response(ride, current_user) for ride in rides]
