@@ -924,10 +924,11 @@ function renderCalendar() {
 }
 
 function renderCalendarDay() {
-  const dayReservations = reservationsForDay(state.selectedDate);
-  els.selectedDayTitle.textContent = `${selectedDayFormatter.format(
-    state.selectedDate
-  )}の予約`;
+  const today = startOfDay(new Date());
+  const dayReservations = reservationsForDay(today);
+  els.selectedDayTitle.textContent = `今日（${dateFormatter.format(
+    today
+  )}）の予約`;
   els.calendarDayList.innerHTML = dayReservations.length
     ? dayReservations
         .map((reservation) => reservationCard(reservation, true))
