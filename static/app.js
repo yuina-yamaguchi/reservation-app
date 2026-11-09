@@ -1,7 +1,7 @@
 'use strict';
 
 const API = '/api';
-const CACHE_KEY = 'reservation-app-state-v4';
+const CACHE_KEY = 'reservation-app-state-v5';
 const CARPOOL_SEEN_KEY_PREFIX = 'reservation-app-carpool-seen-v1:';
 const CARPOOL_POLL_MS = 60000;
 let carpoolPollTimer = null;
@@ -612,12 +612,18 @@ async function loadAll() {
   }
 }
 
+function memberDisplayName(member) {
+  return member?.username || member?.name || '住人';
+}
+
 function memberOptionMarkup(members, selectedId) {
   const options = ['<option value="">なし</option>'];
   members.forEach((member) => {
     const selected = String(member.id) === String(selectedId) ? ' selected' : '';
     options.push(
-      `<option value="${member.id}"${selected}>${esc(member.name)}</option>`
+      `<option value="${member.id}"${selected}>${esc(
+        memberDisplayName(member)
+      )}</option>`
     );
   });
   return options.join('');
@@ -645,14 +651,17 @@ function renderSelects() {
     els.reserveMember.innerHTML = state.members.length
       ? state.members
           .map(
-            (member) => `<option value="${member.id}">${esc(member.name)}</option>`
+            (member) =>
+              `<option value="${member.id}">${esc(
+                memberDisplayName(member)
+              )}</option>`
           )
           .join('')
       : '<option value="">住人が登録されていません</option>';
   } else if (ownMember) {
     els.reserveMember.disabled = true;
     els.reserveMember.innerHTML = `<option value="${ownMember.id}">${esc(
-      ownMember.name
+      memberDisplayName(ownMember)
     )}</option>`;
   } else {
     els.reserveMember.disabled = true;
@@ -706,12 +715,14 @@ function renderHome() {
 
         let detail;
         if (current) {
-          detail = `<strong>${esc(current.member?.name || '住人')}</strong> が利用中<br>${esc(
+          detail = `<strong>${esc(
+            memberDisplayName(current.member)
+          )}</strong> が利用中<br>${esc(
             formatRange(current.start_time, current.end_time)
           )}`;
         } else if (next) {
           detail = `次の予約：${esc(formatDateTime(next.start_time))}<br>利用者：<strong>${esc(
-            next.member?.name || '住人'
+            memberDisplayName(next.member)
           )}</strong>`;
         } else {
           detail = '予約はありません';
@@ -802,7 +813,9 @@ function reservationCard(reservation, showActions) {
       <div class="reservation-main">
         <div class="reservation-title">
           ${esc(reservation.car?.name || '車')}
-          <span class="chip">${esc(reservation.member?.name || '住人')}</span>
+          <span class="chip">${esc(
+            memberDisplayName(reservation.member)
+          )}</span>
           ${carpoolBadge}
         </div>
         <div class="reservation-time">${esc(
@@ -1033,7 +1046,7 @@ function renderReservationDayModal(date) {
           <div class="reservation-detail-title">
             ${esc(r.car?.name || '車')}
             ${carpoolBadge}
-            <span class="chip">${esc(r.member?.name || '住人')}</span>
+            <span class="chip">${esc(memberDisplayName(r.member))}</span>
           </div>
           <div class="reservation-detail-time">${formatRange(r.start_time, r.end_time)}（約${durationHours}時間）</div>
           ${chargeHtml}
@@ -1085,7 +1098,7 @@ function renderSettings() {
           (member) => `
             <div class="setting-row">
               <div class="setting-info">
-                <strong>${esc(member.name)}</strong>
+                <strong>${esc(memberDisplayName(member))}</strong>
               </div>
               <div class="setting-actions">
                 <button class="icon-btn" type="button" data-action="edit-member" data-id="${
@@ -1196,8 +1209,11 @@ function renderPlanCard() {
     <div class="ticket-list">${ticketRows}</div>
     <p class="form-hint">購入額は月別利用額に加算され、後精算になります。</p>
     <div class="form-actions">
-      <button class="btn btn-ghost btn-small" type="button" data-action="purchase-pack">6時間パックを購入（${formatYen(4200)}）</button>
-      <button class="btn btn-ghost btn-small" type="button" data-action="purchase-extra">追加6時間券を購入（${formatYen(extraPrice)}）</button>
+      ${
+        (profile.plan || 'none') === 'none'
+          ? `<button class="btn btn-ghost btn-small" type="button" data-action="purchase-pack">6時間パックを購入（${formatYen(4200)}）</button>`
+          : `<button class="btn btn-ghost btn-small" type="button" data-action="purchase-extra">追加6時間券を購入（${formatYen(extraPrice)}）</button>`
+      }
     </div>
     <div class="section-head section-head--spaced">
       <h2>プラン・プロフィール</h2>

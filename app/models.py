@@ -64,6 +64,11 @@ class Member(Base):
     name = Column(String(100), nullable=False)
 
     reservations = relationship("Reservation", back_populates="member")
+    users = relationship("User", viewonly=True)
+
+    @property
+    def username(self) -> str | None:
+        return self.users[0].username if self.users else None
 
 
 class User(Base):

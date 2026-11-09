@@ -2,7 +2,7 @@ import json
 from datetime import datetime
 
 from fastapi import APIRouter, Depends, HTTPException, Request, status
-from sqlalchemy.orm import Session, joinedload
+from sqlalchemy.orm import Session, joinedload, selectinload
 
 from .. import key_service, models, pricing, schemas, ticket_service
 from ..auth import require_auth
@@ -32,7 +32,7 @@ def check_conflict(
 def _with_relations(db: Session):
     return db.query(models.Reservation).options(
         joinedload(models.Reservation.car),
-        joinedload(models.Reservation.member),
+        joinedload(models.Reservation.member).selectinload(models.Member.users),
         joinedload(models.Reservation.charge),
         joinedload(models.Reservation.ride_share).joinedload(
             models.RideShare.applications

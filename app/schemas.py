@@ -61,6 +61,7 @@ class MemberCreate(MemberBase):
 
 class MemberResponse(MemberBase):
     id: int
+    username: str | None = None
 
     model_config = {"from_attributes": True}
 

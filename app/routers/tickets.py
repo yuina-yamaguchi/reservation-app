@@ -44,6 +44,12 @@ def purchase_tickets(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="付与券は購入できません",
         )
+    expected_source = "pack" if current_user.plan == "none" else "extra"
+    if payload.source != expected_source:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="このプランでは選択した券を購入できません",
+        )
     return ticket_service.grant_tickets(
         db, current_user, payload.source, payload.count
     )

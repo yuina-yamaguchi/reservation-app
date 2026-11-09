@@ -1,6 +1,6 @@
 from fastapi import APIRouter, Depends
 from sqlalchemy import or_
-from sqlalchemy.orm import Session, joinedload
+from sqlalchemy.orm import Session, joinedload, selectinload
 
 from .. import key_service, models, pricing, schemas, ticket_service
 from ..auth import require_auth, user_to_dict
@@ -32,7 +32,9 @@ def get_state(
             db.query(models.Reservation)
             .options(
                 joinedload(models.Reservation.car),
-                joinedload(models.Reservation.member),
+                joinedload(models.Reservation.member).selectinload(
+                    models.Member.users
+                ),
                 joinedload(models.Reservation.charge),
             )
             .order_by(models.Reservation.start_time)

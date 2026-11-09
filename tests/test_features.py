@@ -130,11 +130,15 @@ def test_plan_and_tickets(auth_client):
 
     logout(auth_client)
     login(auth_client, "resident")
-    purchased = auth_client.post(
+    disallowed_pack = auth_client.post(
         "/api/tickets/purchase", json={"source": "pack", "count": 1}
     )
+    assert disallowed_pack.status_code == 400
+    purchased = auth_client.post(
+        "/api/tickets/purchase", json={"source": "extra", "count": 1}
+    )
     assert purchased.status_code == 201
-    assert purchased.json()[0]["price"] == 4200
+    assert purchased.json()[0]["price"] == 3800
 
     logout(auth_client)
     login_admin(auth_client)
@@ -145,6 +149,25 @@ def test_plan_and_tickets(auth_client):
     assert granted.status_code == 201
     assert len(granted.json()) == 2
     assert all(ticket["price"] == 3800 for ticket in granted.json())
+
+
+def test_time_only_plan_purchases_pack_only(auth_client):
+    member = create_member(auth_client, "時間券のみ")
+    create_user(auth_client, "time_only", member["id"])
+
+    logout(auth_client)
+    login(auth_client, "time_only")
+
+    disallowed_extra = auth_client.post(
+        "/api/tickets/purchase", json={"source": "extra", "count": 1}
+    )
+    assert disallowed_extra.status_code == 400
+
+    purchased = auth_client.post(
+        "/api/tickets/purchase", json={"source": "pack", "count": 1}
+    )
+    assert purchased.status_code == 201
+    assert purchased.json()[0]["price"] == 4200
 
 
 def test_self_service_plan_and_profile(auth_client):
