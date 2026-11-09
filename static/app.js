@@ -1368,18 +1368,33 @@ function renderReservationOptions(data) {
 
   els.reservationOptions.innerHTML = data.options
     .map((option) => {
-      const title =
-        option.type === 'ticket'
-          ? `6時間券を使う（${ticketSourceLabel(option.ticket_source)}）`
-          : '時間券（1時間700円）';
-      const detail =
-        option.type === 'ticket'
-          ? `今回の追加支払い ${formatYen(option.total)}${
-              option.ticket_expires_at
-                ? ` / 券の期限 ${formatDateOnly(option.ticket_expires_at)}`
-                : ''
-            }`
-          : `今回の支払い ${formatYen(option.total)}`;
+      const sourceLabel = ticketSourceLabel(option.ticket_source);
+      const expiry = option.ticket_expires_at
+        ? ` / 券の期限 ${formatDateOnly(option.ticket_expires_at)}`
+        : '';
+      let title;
+      let detail;
+      switch (option.type) {
+        case 'ticket':
+          title = `6時間券を使う（${sourceLabel}）`;
+          detail = `今回の追加支払い ${formatYen(option.total)}${expiry}`;
+          break;
+        case 'ticket_2':
+          title = '6時間券を2枚使う';
+          detail = `今回の追加支払い ${formatYen(option.total)}${expiry}`;
+          break;
+        case 'ticket_overflow':
+          title = `6時間券を使う（${sourceLabel}）＋超過分`;
+          detail = `今回の支払い ${formatYen(option.total)}（超過分のみ）${expiry}`;
+          break;
+        case 'time_all':
+          title = 'すべて時間料金（1時間700円）';
+          detail = `今回の支払い ${formatYen(option.total)}（6時間券を使わない）`;
+          break;
+        default:
+          title = '時間券（1時間700円）';
+          detail = `今回の支払い ${formatYen(option.total)}`;
+      }
       return `
         <label class="option-card">
           <input type="radio" name="payment_type" value="${option.type}" ${
@@ -1396,7 +1411,7 @@ function renderReservationOptions(data) {
   els.reservationOptionsHint.textContent = data.hours
     ? `利用時間 ${data.hours}時間 / ${
         data.options.length > 1
-          ? '券と時間券の両方が使えます'
+          ? `${data.options.length}つの支払い方法から選べます`
           : '利用できる支払い方法は1つです'
       }`
     : '';
