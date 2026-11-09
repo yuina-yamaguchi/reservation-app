@@ -297,6 +297,10 @@ const selectedDayFormatter = new Intl.DateTimeFormat('ja-JP', {
   weekday: 'long',
 });
 
+const weekdayFormatter = new Intl.DateTimeFormat('ja-JP', {
+  weekday: 'short',
+});
+
 function formatDateTime(value) {
   const date = new Date(value);
   return `${dateFormatter.format(date)} ${timeFormatter.format(date)}`;
@@ -910,6 +914,7 @@ function renderCalendar() {
         key === selectedKey
       }">
         <span class="calendar-day-number">${date.getDate()}</span>
+        <span class="calendar-day-weekday">${esc(weekdayFormatter.format(date))}</span>
         <span class="calendar-chips">${chips.join('')}</span>
       </button>
     `);

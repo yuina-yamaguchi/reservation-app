@@ -575,6 +575,13 @@ button {
   font-weight: 700;
 }
 
+.calendar-day-weekday {
+  display: none;
+  color: var(--muted);
+  font-size: 0.75rem;
+  font-weight: 700;
+}
+
 .calendar-chips {
   display: flex;
   min-width: 0;
@@ -1350,20 +1357,46 @@ select:focus {
     align-items: flex-start;
   }
 
+  .calendar-weekdays {
+    display: none;
+  }
+
+  .calendar-grid {
+    grid-template-columns: 1fr;
+    gap: 8px;
+  }
+
   .calendar-day {
-    min-height: 64px;
-    padding: 4px;
+    min-height: auto;
+    padding: 10px 12px;
+    flex-direction: row;
+    align-items: center;
+    gap: 10px;
   }
 
   .calendar-day-number {
-    width: 20px;
-    height: 20px;
-    font-size: 0.7rem;
+    flex: 0 0 auto;
+    width: 32px;
+    height: 32px;
+    font-size: 1rem;
+  }
+
+  .calendar-day-weekday {
+    display: inline-block;
+  }
+
+  .calendar-chips {
+    flex: 1 1 auto;
+    gap: 4px;
   }
 
   .calendar-chip,
   .calendar-more {
-    font-size: 0.55rem;
+    font-size: 0.75rem;
+  }
+
+  .calendar-chip {
+    padding: 2px 8px;
   }
 }
 
