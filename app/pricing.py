@@ -21,8 +21,8 @@ OVERFLOW_HOURLY_RATE = 700
 OVERFLOW_CAP = 2400
 TICKET_HOURS = 6
 KEY_VALID_BEFORE_MINUTES = 10
-KEY_VALID_AFTER_MINUTES = 10
-KEY_ISSUE_LEAD_HOURS = 24
+KEY_VALID_AFTER_MINUTES = 15
+KEY_ISSUE_BEFORE_MINUTES = 10
 RESERVATION_BUFFER_MINUTES = 30
 WEEKEND_RESERVATION_LIMIT = 2
 TICKET_BOOKING_DAYS = 30
@@ -160,7 +160,7 @@ def key_validity(start: datetime, end: datetime) -> tuple[datetime, datetime]:
 
 
 def key_issue_after(start: datetime) -> datetime:
-    return start - timedelta(hours=KEY_ISSUE_LEAD_HOURS)
+    return start - timedelta(minutes=KEY_ISSUE_BEFORE_MINUTES)
 
 
 def handover_buffer() -> timedelta:

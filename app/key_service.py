@@ -206,8 +206,6 @@ def schedule_reservation_key(
         return existing
 
     device = _active_device(db, reservation.car_id)
-    if not device:
-        return None
 
     valid_from, valid_to = pricing.key_validity(
         reservation.start_time, reservation.end_time
@@ -218,7 +216,7 @@ def schedule_reservation_key(
         reservation_id=reservation.id,
         car_id=reservation.car_id,
         recipient_user_id=recipient.id if recipient else None,
-        device_id=device.id,
+        device_id=device.id if device else None,
         purpose="reservation",
         valid_from=valid_from,
         valid_to=valid_to,
@@ -239,8 +237,25 @@ def schedule_reservation_key(
         detail=f"issue_after={issue_after.isoformat()}",
     )
 
-    if now >= issue_after:
-        _provider_issue(db, key, now)
+    if device:
+        if now >= issue_after:
+            _provider_issue(db, key, now)
+    else:
+        # キーボックス未登録のため、予約者向けのモックキーを即時発行する
+        key.provider_key_id = f"mock-reservation-{key.id}"
+        key.status = "issued"
+        key.issued_at = now
+        key.last_error = ""
+        _audit(
+            db,
+            car_id=reservation.car_id,
+            actor_user_id=recipient.id if recipient else None,
+            digital_key_id=key.id,
+            action="issue",
+            result="success",
+            reason=key.reason,
+            detail="mock-issued (no keybox)",
+        )
 
     return key
 

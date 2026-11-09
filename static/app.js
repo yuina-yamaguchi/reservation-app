@@ -795,7 +795,9 @@ function reservationCard(reservation, showActions) {
       } / 今回の負担 ${formatYen(charge.actual_burden)}</div>`
     : '';
   const key = reservation.digital_key;
-  const keyLine = key
+  const keyVisible =
+    key && key.recipient_user_id === state.currentUser?.id;
+  const keyLine = keyVisible
     ? `<div class="reservation-meta reservation-meta--key">デジタルキー: ${esc(
         keyStatusLabel(key.status)
       )}（${esc(formatDateTime(key.valid_from))} 〜 ${esc(
@@ -1033,8 +1035,16 @@ function renderReservationDayModal(date) {
     }
 
     let keyHtml = '';
-    if ((isOwner || isAdmin()) && r.digital_key) {
-      keyHtml = `<div class="reservation-detail-meta">キー: ${keyStatusLabel(r.digital_key.status)}</div>`;
+    if (
+      r.digital_key &&
+      r.digital_key.recipient_user_id === state.currentUser?.id
+    ) {
+      const key = r.digital_key;
+      keyHtml = `<div class="reservation-detail-meta">デジタルキー: ${keyStatusLabel(
+        key.status
+      )}（${esc(formatDateTime(key.valid_from))} 〜 ${esc(
+        timeFormatter.format(new Date(key.valid_to))
+      )}）</div>`;
     }
 
     const carpoolBadge = isCarpoolRecruiting(rideShare, r.start_time)

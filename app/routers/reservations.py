@@ -58,6 +58,10 @@ def reservation_to_response(
     if not can_view_reservation_note(reservation, current_user):
         data["note"] = ""
 
+    key = reservation.digital_key
+    if key is None or key.recipient_user_id != current_user.id:
+        data["digital_key"] = None
+
     charge = data.get("charge")
     if charge:
         is_owner = current_user.role == "admin" or charge.get("ticket_user_id") == current_user.id

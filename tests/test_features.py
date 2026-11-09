@@ -611,8 +611,13 @@ def test_digital_keys_and_audit(auth_client):
     )
     assert reservation.status_code == 201
     key = reservation.json()["digital_key"]
-    assert key["status"] == "issued"
-    assert key["provider_key_id"].startswith("mock-")
+    assert key["status"] == "scheduled"
+    assert key["provider_key_id"] is None
+    valid_from = datetime.fromisoformat(key["valid_from"])
+    valid_to = datetime.fromisoformat(key["valid_to"])
+    end = start + timedelta(hours=1)
+    assert valid_from == start - timedelta(minutes=10)
+    assert valid_to == end + timedelta(minutes=15)
 
     state = auth_client.get("/api/state/")
     assert state.status_code == 200
@@ -697,3 +702,39 @@ def test_digital_keys_and_audit(auth_client):
         },
     )
     assert confirmed.status_code == 201
+
+
+def test_reservation_key_issued_without_keybox(auth_client):
+    car = create_car(auth_client, name="キーボックスなし車")
+    member = create_member(auth_client, "キー受取")
+    user = create_user(auth_client, "key_recipient", member["id"])
+
+    logout(auth_client)
+    login(auth_client, "key_recipient")
+    start = pricing.now_jst() + timedelta(hours=3)
+    reservation = create_reservation(
+        auth_client, car["id"], member["id"], start, hours=2
+    )
+    assert reservation.status_code == 201
+    body = reservation.json()
+    key = body["digital_key"]
+    assert key is not None
+    assert key["status"] == "issued"
+    assert key["provider_key_id"].startswith("mock-reservation-")
+    assert key["recipient_user_id"] == user["id"]
+
+    valid_from = datetime.fromisoformat(key["valid_from"])
+    valid_to = datetime.fromisoformat(key["valid_to"])
+    end = start + timedelta(hours=2)
+    assert valid_from == start - timedelta(minutes=10)
+    assert valid_to == end + timedelta(minutes=15)
+
+    listed = auth_client.get("/api/reservations/").json()
+    own = next(item for item in listed if item["id"] == body["id"])
+    assert own["digital_key"]["id"] == key["id"]
+
+    logout(auth_client)
+    login_admin(auth_client)
+    listed = auth_client.get("/api/reservations/").json()
+    other = next(item for item in listed if item["id"] == body["id"])
+    assert other["digital_key"] is None
