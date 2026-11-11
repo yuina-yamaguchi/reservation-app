@@ -159,3 +159,35 @@ def revoke_key(
     if not key:
         raise HTTPException(status_code=404, detail="デジタルキーが見つかりません")
     return key_service.revoke_key(db, key, current_user, request)
+
+
+@router.post("/{key_id}/unlock", response_model=schemas.DigitalKeyResponse)
+def unlock_key(
+    key_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(require_auth),
+):
+    key = db.query(models.DigitalKey).filter(models.DigitalKey.id == key_id).first()
+    if not key:
+        raise HTTPException(status_code=404, detail="デジタルキーが見つかりません")
+    try:
+        return key_service.unlock_key(db, key, current_user, request)
+    except key_service.KeyServiceError as exc:
+        raise _handle_key_error(exc) from exc
+
+
+@router.post("/{key_id}/lock", response_model=schemas.DigitalKeyResponse)
+def lock_key(
+    key_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(require_auth),
+):
+    key = db.query(models.DigitalKey).filter(models.DigitalKey.id == key_id).first()
+    if not key:
+        raise HTTPException(status_code=404, detail="デジタルキーが見つかりません")
+    try:
+        return key_service.lock_key(db, key, current_user, request)
+    except key_service.KeyServiceError as exc:
+        raise _handle_key_error(exc) from exc

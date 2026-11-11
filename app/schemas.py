@@ -422,6 +422,7 @@ class DigitalKeyResponse(BaseModel):
     last_error: str
     reason: str
     was_in_use: bool
+    lock_state: str = "locked"
 
     model_config = {"from_attributes": True}
 

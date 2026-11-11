@@ -146,22 +146,19 @@ class Reservation(Base):
         cascade="all, delete-orphan",
     )
 
+    digital_keys_rel = relationship(
+        "DigitalKey",
+        primaryjoin="and_(DigitalKey.reservation_id == Reservation.id, DigitalKey.purpose == 'reservation')",
+        foreign_keys="DigitalKey.reservation_id",
+        order_by="DigitalKey.id.desc()",
+        lazy="select",
+        viewonly=True,
+    )
+
     @property
     def digital_key(self):
-        from sqlalchemy.orm import object_session
-
-        session = object_session(self)
-        if session is None or self.id is None:
-            return None
-        return (
-            session.query(DigitalKey)
-            .filter(
-                DigitalKey.reservation_id == self.id,
-                DigitalKey.purpose == "reservation",
-            )
-            .order_by(DigitalKey.id.desc())
-            .first()
-        )
+        keys = self.digital_keys_rel
+        return keys[0] if keys else None
 
 
 class ReservationCharge(Base):
@@ -323,6 +320,7 @@ class DigitalKey(Base):
     requested_ip = Column(String(100), nullable=False, default="")
     requested_user_agent = Column(String(500), nullable=False, default="")
     was_in_use = Column(Boolean, nullable=False, default=False)
+    lock_state = Column(String(20), nullable=False, default="locked")
     reservation_snapshot = Column(Text, nullable=False, default="")
     created_at = Column(DateTime, nullable=False, default=datetime.now)
 

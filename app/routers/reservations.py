@@ -37,6 +37,7 @@ def _with_relations(db: Session):
         joinedload(models.Reservation.ride_share).joinedload(
             models.RideShare.applications
         ),
+        selectinload(models.Reservation.digital_keys_rel),
     )
 
 

@@ -598,3 +598,106 @@ def remote_unlock(
     )
     db.commit()
     return {"ok": True, "result": result, "was_in_use": bool(active)}
+
+
+
+def _check_key_operable(key: models.DigitalKey, actor: models.User, now: datetime) -> None:
+    """解錠・施錠操作の前提条件を検証する。"""
+    if key.status != "issued":
+        raise KeyServiceError(409, "このキーはまだ発行されていないか、すでに失効しています")
+    if now < key.valid_from:
+        raise KeyServiceError(409, "このキーの有効期間はまだ始まっていません")
+    if now > key.valid_to:
+        raise KeyServiceError(409, "このキーの有効期間が終了しています")
+    if actor.role != "admin" and key.recipient_user_id != actor.id:
+        raise KeyServiceError(403, "このキーを操作する権限がありません")
+
+
+def unlock_key(
+    db: Session,
+    key: models.DigitalKey,
+    actor: models.User,
+    request,
+    now: datetime | None = None,
+) -> models.DigitalKey:
+    now = now or pricing.now_jst()
+    _check_key_operable(key, actor, now)
+    ip, user_agent = request_meta(request)
+
+    provider = get_provider()
+    try:
+        provider.unlock(key.provider_key_id or "")
+    except Exception as exc:  # noqa: BLE001
+        _audit(
+            db,
+            car_id=key.car_id,
+            actor_user_id=actor.id,
+            digital_key_id=key.id,
+            action="unlock",
+            result="failure",
+            ip=ip,
+            user_agent=user_agent,
+            detail=str(exc)[:1000],
+        )
+        db.commit()
+        raise KeyServiceError(502, "解錠に失敗しました") from exc
+
+    key.lock_state = "unlocked"
+    _audit(
+        db,
+        car_id=key.car_id,
+        actor_user_id=actor.id,
+        digital_key_id=key.id,
+        action="unlock",
+        result="success",
+        ip=ip,
+        user_agent=user_agent,
+    )
+    db.commit()
+    db.refresh(key)
+    return key
+
+
+def lock_key(
+    db: Session,
+    key: models.DigitalKey,
+    actor: models.User,
+    request,
+    now: datetime | None = None,
+) -> models.DigitalKey:
+    now = now or pricing.now_jst()
+    _check_key_operable(key, actor, now)
+    ip, user_agent = request_meta(request)
+
+    provider = get_provider()
+    try:
+        provider.lock(key.provider_key_id or "")
+    except Exception as exc:  # noqa: BLE001
+        _audit(
+            db,
+            car_id=key.car_id,
+            actor_user_id=actor.id,
+            digital_key_id=key.id,
+            action="lock",
+            result="failure",
+            ip=ip,
+            user_agent=user_agent,
+            detail=str(exc)[:1000],
+        )
+        db.commit()
+        raise KeyServiceError(502, "施錠に失敗しました") from exc
+
+    key.lock_state = "locked"
+    _audit(
+        db,
+        car_id=key.car_id,
+        actor_user_id=actor.id,
+        digital_key_id=key.id,
+        action="lock",
+        result="success",
+        ip=ip,
+        user_agent=user_agent,
+    )
+    db.commit()
+    db.refresh(key)
+    return key

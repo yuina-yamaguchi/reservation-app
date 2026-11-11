@@ -1,31 +1,54 @@
-from fastapi import APIRouter, Depends
+from datetime import timedelta
+
+from fastapi import APIRouter, BackgroundTasks, Depends
 from sqlalchemy import or_
 from sqlalchemy.orm import Session, joinedload, selectinload
 
 from .. import key_service, models, pricing, schemas, ticket_service
 from ..auth import require_auth, user_to_dict
-from ..database import get_db
+from ..database import SessionLocal, get_db
 from .carpools import _application_response, _ride_query, _ride_response
 from .key_devices import _to_response as _device_response
 from .reservations import reservation_to_response
 
 router = APIRouter(prefix="/state", tags=["状態"])
 
+# 終了済み予約を返す期間（日）
+_PAST_RESERVATION_DAYS = 60
+
+
+def _run_background_tasks(user_id: int, now) -> None:
+    """サイドエフェクト処理をバックグラウンドで実行する。"""
+    db = SessionLocal()
+    try:
+        key_service.issue_due(db, now)
+        user = db.query(models.User).filter(models.User.id == user_id).first()
+        if user:
+            ticket_service.ensure_monthly_plan_charge(db, user, now)
+            ticket_service.ensure_monthly_tickets(db, user, now)
+        ticket_service.sweep_tickets(db, now)
+    except Exception:
+        pass
+    finally:
+        db.close()
+
 
 @router.get("/", response_model=schemas.StateResponse)
 def get_state(
+    background_tasks: BackgroundTasks,
     db: Session = Depends(get_db),
     current_user: models.User = Depends(require_auth),
 ):
     now = pricing.now_jst()
-    key_service.issue_due(db, now)
 
-    ticket_service.ensure_monthly_plan_charge(db, current_user, now)
-    ticket_service.ensure_monthly_tickets(db, current_user, now)
-    ticket_service.sweep_tickets(db, now)
+    # サイドエフェクトはレスポンス返却後にバックグラウンドで実行
+    background_tasks.add_task(_run_background_tasks, current_user.id, now)
 
     cars = db.query(models.Car).order_by(models.Car.id).all()
     members = db.query(models.Member).order_by(models.Member.id).all()
+
+    # 終了済み予約は直近60日分のみ返す（今後の予約は全件）
+    cutoff = now - timedelta(days=_PAST_RESERVATION_DAYS)
     reservations = [
         reservation_to_response(reservation, current_user)
         for reservation in (
@@ -36,6 +59,13 @@ def get_state(
                     models.Member.users
                 ),
                 joinedload(models.Reservation.charge),
+                selectinload(models.Reservation.digital_keys_rel),
+            )
+            .filter(
+                or_(
+                    models.Reservation.end_time >= cutoff,
+                    models.Reservation.start_time >= now,
+                )
             )
             .order_by(models.Reservation.start_time)
             .all()

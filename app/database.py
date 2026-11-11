@@ -58,6 +58,7 @@ Base = declarative_base()
 SCHEMA_ADDITIONS = (
     ("reservations", "note_public", "BOOLEAN NOT NULL DEFAULT 0"),
     ("ride_shares", "note_public", "BOOLEAN NOT NULL DEFAULT 0"),
+    ("digital_keys", "lock_state", "VARCHAR(20) NOT NULL DEFAULT 'locked'"),
 )
 
 

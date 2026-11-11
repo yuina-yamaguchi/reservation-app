@@ -5,7 +5,7 @@ from typing import Any
 
 
 class MockKeyProvider:
-    """実機・ベンダーAPIがない環境で鍵の発行・失効を模擬する。"""
+    """実機・ベンダーAPIがない環境で鍵の発行・失効・解錠・施錠を模擬する。"""
 
     def issue_key(
         self,
@@ -40,3 +40,9 @@ class MockKeyProvider:
             "battery": 100,
             "provider_device_id": device.provider_device_id,
         }
+
+    def unlock(self, provider_key_id: str) -> dict[str, Any]:
+        return {"ok": True, "lock_state": "unlocked", "provider_key_id": provider_key_id}
+
+    def lock(self, provider_key_id: str) -> dict[str, Any]:
+        return {"ok": True, "lock_state": "locked", "provider_key_id": provider_key_id}

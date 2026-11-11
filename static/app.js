@@ -243,16 +243,37 @@ function applyState(data) {
 }
 
 function renderAll() {
+  // 全タブ共通：セレクト・権限UI は常に更新
   renderSelects();
-  renderHome();
-  renderReservationLists();
-  renderSettings();
-  renderPlanCard();
-  renderBillingCard();
-  renderCarpools();
-  renderKeyDevices();
-  renderMasterKeyPanel();
   applyRoleUI();
+
+  // 現在表示しているタブだけ再描画（非表示タブはスキップして高速化）
+  const tab = state.activeTab;
+  if (tab === 'home') {
+    renderHome();
+    renderPlanCard();
+    renderBillingCard();
+  } else if (tab === 'reserve') {
+    // 予約フォームはrenderSelectsで更新済み
+  } else if (tab === 'list') {
+    renderReservationLists();
+  } else if (tab === 'carpool') {
+    renderCarpools();
+  } else if (tab === 'settings') {
+    renderSettings();
+    renderKeyDevices();
+    renderMasterKeyPanel();
+  } else {
+    // フォールバック：全部描画
+    renderHome();
+    renderReservationLists();
+    renderSettings();
+    renderPlanCard();
+    renderBillingCard();
+    renderCarpools();
+    renderKeyDevices();
+    renderMasterKeyPanel();
+  }
 }
 
 const HTML_ESCAPES = {
@@ -798,11 +819,15 @@ function reservationCard(reservation, showActions) {
   const keyVisible =
     key && key.recipient_user_id === state.currentUser?.id;
   const keyLine = keyVisible
-    ? `<div class="reservation-meta reservation-meta--key">デジタルキー: ${esc(
-        keyStatusLabel(key.status)
-      )}（${esc(formatDateTime(key.valid_from))} 〜 ${esc(
-        timeFormatter.format(new Date(key.valid_to))
-      )}）</div>`
+    ? (() => {
+        const operable = isKeyOperable(key);
+        const stateBadge = key.lock_state === 'unlocked'
+          ? `<span class="lock-state-badge lock-state-badge--unlocked"><svg class="icon" aria-hidden="true" style="width:13px;height:13px"><use href="#icon-lock-open"></use></svg>解錠中</span>`
+          : `<span class="lock-state-badge lock-state-badge--locked"><svg class="icon" aria-hidden="true" style="width:13px;height:13px"><use href="#icon-lock-closed"></use></svg>施錠中</span>`;
+        const unlockBtn = `<button class="btn-unlock" type="button" data-action="unlock-key" data-id="${key.id}" ${operable && key.lock_state !== 'unlocked' ? '' : 'disabled'}><svg class="icon" aria-hidden="true"><use href="#icon-lock-open"></use></svg>解錠</button>`;
+        const lockBtn = `<button class="btn-lock" type="button" data-action="lock-key" data-id="${key.id}" ${operable && key.lock_state === 'unlocked' ? '' : 'disabled'}><svg class="icon" aria-hidden="true"><use href="#icon-lock-closed"></use></svg>施錠</button>`;
+        return `<div class="reservation-meta reservation-meta--key">デジタルキー: ${esc(keyStatusLabel(key.status))} ${stateBadge}（${esc(formatDateTime(key.valid_from))} 〜 ${esc(timeFormatter.format(new Date(key.valid_to)))}）<div class="key-actions">${unlockBtn}${lockBtn}</div></div>`;
+      })()
     : '';
   const carpoolRecruiting = isCarpoolRecruiting(
     reservation.ride_share,
@@ -1040,11 +1065,13 @@ function renderReservationDayModal(date) {
       r.digital_key.recipient_user_id === state.currentUser?.id
     ) {
       const key = r.digital_key;
-      keyHtml = `<div class="reservation-detail-meta">デジタルキー: ${keyStatusLabel(
-        key.status
-      )}（${esc(formatDateTime(key.valid_from))} 〜 ${esc(
-        timeFormatter.format(new Date(key.valid_to))
-      )}）</div>`;
+      const operable = isKeyOperable(key);
+      const stateBadge = key.lock_state === 'unlocked'
+        ? `<span class="lock-state-badge lock-state-badge--unlocked"><svg class="icon" aria-hidden="true" style="width:13px;height:13px"><use href="#icon-lock-open"></use></svg>解錠中</span>`
+        : `<span class="lock-state-badge lock-state-badge--locked"><svg class="icon" aria-hidden="true" style="width:13px;height:13px"><use href="#icon-lock-closed"></use></svg>施錠中</span>`;
+      const unlockBtn = `<button class="btn-unlock" type="button" data-action="unlock-key" data-id="${key.id}" ${operable && key.lock_state !== 'unlocked' ? '' : 'disabled'}><svg class="icon" aria-hidden="true"><use href="#icon-lock-open"></use></svg>解錠</button>`;
+      const lockBtn = `<button class="btn-lock" type="button" data-action="lock-key" data-id="${key.id}" ${operable && key.lock_state === 'unlocked' ? '' : 'disabled'}><svg class="icon" aria-hidden="true"><use href="#icon-lock-closed"></use></svg>施錠</button>`;
+      keyHtml = `<div class="reservation-detail-meta">デジタルキー: ${esc(keyStatusLabel(key.status))} ${stateBadge}（${esc(formatDateTime(key.valid_from))} 〜 ${esc(timeFormatter.format(new Date(key.valid_to)))}）<div class="key-actions">${unlockBtn}${lockBtn}</div></div>`;
     }
 
     const carpoolBadge = isCarpoolRecruiting(rideShare, r.start_time)
@@ -1404,11 +1431,11 @@ function renderReservationOptions(data) {
           detail = `今回の支払い ${formatYen(option.total)}（超過分のみ）${expiry}`;
           break;
         case 'time_all':
-          title = 'すべて時間料金（1時間700円）';
+          title = 'すべて時間料金（¥700/h）';
           detail = `今回の支払い ${formatYen(option.total)}（6時間券を使わない）`;
           break;
         default:
-          title = '時間券（1時間700円）';
+          title = '時間券（¥700/h）';
           detail = `今回の支払い ${formatYen(option.total)}`;
       }
       return `
@@ -2101,6 +2128,47 @@ async function deactivateKeyDevice(deviceId) {
   }
 }
 
+function isKeyOperable(key) {
+  if (!key || key.status !== 'issued') return false;
+  const now = Date.now();
+  return new Date(key.valid_from).getTime() <= now && now <= new Date(key.valid_to).getTime();
+}
+
+async function unlockKey(keyId) {
+  try {
+    const updated = await apiFetch(`/digital-keys/${keyId}/unlock`, { method: 'POST' });
+    // stateのdigitalKeysとreservationsを更新
+    state.digitalKeys = state.digitalKeys.map((k) => (k.id === updated.id ? updated : k));
+    state.reservations = state.reservations.map((r) => {
+      if (r.digital_key && r.digital_key.id === updated.id) {
+        return { ...r, digital_key: updated };
+      }
+      return r;
+    });
+    renderAll();
+    toast('解錠しました（モック）');
+  } catch (error) {
+    if (error.message !== 'unauthorized') toast(error.message, true);
+  }
+}
+
+async function lockKey(keyId) {
+  try {
+    const updated = await apiFetch(`/digital-keys/${keyId}/lock`, { method: 'POST' });
+    state.digitalKeys = state.digitalKeys.map((k) => (k.id === updated.id ? updated : k));
+    state.reservations = state.reservations.map((r) => {
+      if (r.digital_key && r.digital_key.id === updated.id) {
+        return { ...r, digital_key: updated };
+      }
+      return r;
+    });
+    renderAll();
+    toast('施錠しました（モック）');
+  } catch (error) {
+    if (error.message !== 'unauthorized') toast(error.message, true);
+  }
+}
+
 async function revokeDigitalKey(keyId) {
   if (!window.confirm('このデジタルキーを失効しますか？')) return;
   try {
@@ -2396,6 +2464,12 @@ async function handleAction(action, id, dataset = {}) {
       break;
     case 'revoke-key':
       await revokeDigitalKey(id);
+      break;
+    case 'unlock-key':
+      await unlockKey(id);
+      break;
+    case 'lock-key':
+      await lockKey(id);
       break;
     default:
       break;
