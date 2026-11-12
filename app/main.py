@@ -15,6 +15,7 @@ from .routers import (
     carpools,
     cars,
     digital_keys,
+    emergency,
     key_devices,
     members,
     reservations,
@@ -65,6 +66,9 @@ app.include_router(
 )
 app.include_router(
     digital_keys.router, prefix="/api", dependencies=[Depends(require_auth)]
+)
+app.include_router(
+    emergency.router, prefix="/api", dependencies=[Depends(require_auth)]
 )
 
 

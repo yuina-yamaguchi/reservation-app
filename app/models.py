@@ -352,3 +352,21 @@ class KeyAuditEvent(Base):
 
     actor = relationship("User")
     digital_key = relationship("DigitalKey")
+
+
+
+class EmergencyAlert(Base):
+    __tablename__ = "emergency_alerts"
+
+    id = Column(Integer, primary_key=True, index=True)
+    reservation_id = Column(Integer, ForeignKey("reservations.id"), nullable=True, index=True)
+    reporter_user_id = Column(Integer, ForeignKey("users.id"), nullable=False, index=True)
+    car_id = Column(Integer, ForeignKey("cars.id"), nullable=False, index=True)
+    message = Column(String(500), nullable=False, default="")
+    status = Column(String(20), nullable=False, default="open", index=True)
+    resolved_at = Column(DateTime, nullable=True)
+    created_at = Column(DateTime, nullable=False, default=datetime.now)
+
+    reservation = relationship("Reservation")
+    reporter = relationship("User", foreign_keys=[reporter_user_id])
+    car = relationship("Car")

@@ -20,6 +20,7 @@ const state = {
   keyDevices: [],
   digitalKeys: [],
   masterKeys: [],
+  emergencyAlerts: [],
   currentUser: null,
   activeTab: 'home',
   calendarCursor: startOfMonth(new Date()),
@@ -36,6 +37,7 @@ const TAB_TITLES = {
   reserve: '予約する',
   list: '予約一覧',
   carpool: '相乗り',
+  key: 'キー',
   settings: '設定',
 };
 
@@ -189,6 +191,7 @@ function saveCachedState() {
         keyDevices: state.keyDevices,
         digitalKeys: state.digitalKeys,
         masterKeys: state.masterKeys,
+        emergencyAlerts: state.emergencyAlerts,
         currentUser: state.currentUser,
         savedAt: Date.now(),
       })
@@ -237,6 +240,7 @@ function applyState(data) {
   state.keyDevices = data.key_devices ?? data.keyDevices ?? [];
   state.digitalKeys = data.digital_keys ?? data.digitalKeys ?? [];
   state.masterKeys = data.master_keys ?? data.masterKeys ?? [];
+  state.emergencyAlerts = data.emergency_alerts ?? data.emergencyAlerts ?? [];
   if (data.currentUser) {
     state.currentUser = data.currentUser;
   }
@@ -247,6 +251,7 @@ function renderAll() {
   // 全タブ共通：セレクト・権限UI は常に更新
   renderSelects();
   applyRoleUI();
+  renderKeyBadge();
 
   // 現在表示しているタブだけ再描画（非表示タブはスキップして高速化）
   const tab = state.activeTab;
@@ -260,6 +265,8 @@ function renderAll() {
     renderReservationLists();
   } else if (tab === 'carpool') {
     renderCarpools();
+  } else if (tab === 'key') {
+    renderKeyTab();
   } else if (tab === 'settings') {
     renderSettings();
     renderKeyDevices();
@@ -272,6 +279,7 @@ function renderAll() {
     renderPlanCard();
     renderBillingCard();
     renderCarpools();
+    renderKeyTab();
     renderKeyDevices();
     renderMasterKeyPanel();
   }
@@ -586,6 +594,7 @@ async function logout() {
   state.keyDevices = [];
   state.digitalKeys = [];
   state.masterKeys = [];
+  state.emergencyAlerts = [];
   state.billing = null;
   state.billingUserId = '';
   state.reservationOptions = null;
@@ -615,6 +624,7 @@ async function loadAll() {
     state.keyDevices = data.key_devices || [];
     state.digitalKeys = data.digital_keys || [];
     state.masterKeys = data.master_keys || [];
+    state.emergencyAlerts = data.emergency_alerts || [];
     if (data.profile) {
       state.currentUser = { ...(state.currentUser || {}), ...data.profile };
     }
@@ -2162,6 +2172,172 @@ async function deactivateKeyDevice(deviceId) {
   }
 }
 
+// ── キータブ ─────────────────────────────────────
+
+function myActiveReservation() {
+  const now = Date.now();
+  const myMemberId = state.currentUser?.member_id;
+  return state.reservations.find((r) => {
+    const start = new Date(r.start_time).getTime();
+    const end = new Date(r.end_time).getTime();
+    if (start > now || end <= now) return false;
+    if (isAdmin()) return true;
+    return r.member_id === myMemberId;
+  }) || null;
+}
+
+function renderKeyBadge() {
+  const active = myActiveReservation();
+  $$('[data-key-badge]').forEach((badge) => {
+    badge.hidden = !active;
+    if (active) badge.setAttribute('aria-label', '使用中の予約があります');
+  });
+}
+
+function renderKeyTab() {
+  const container = document.getElementById('keyTabContent');
+  if (!container) return;
+
+  renderKeyBadge();
+
+  const reservation = myActiveReservation();
+  if (!reservation) {
+    container.innerHTML = `
+      <div class="key-tab-empty">
+        <svg class="icon key-tab-empty__icon" aria-hidden="true"><use href="#icon-key"></use></svg>
+        <p>現在使用中の予約はありません</p>
+      </div>`;
+    return;
+  }
+
+  const now = Date.now();
+  const car = reservation.car;
+  const key = reservation.digital_key;
+  const keyVisible = key && key.recipient_user_id === state.currentUser?.id;
+  const operable = keyVisible && isKeyOperable(key);
+
+  // 解錠・施錠ボタン
+  const lockStateBadge = keyVisible
+    ? key.lock_state === 'unlocked'
+      ? `<span class="lock-state-badge lock-state-badge--unlocked"><svg class="icon" aria-hidden="true" style="width:13px;height:13px"><use href="#icon-lock-open"></use></svg>解錠中</span>`
+      : `<span class="lock-state-badge lock-state-badge--locked"><svg class="icon" aria-hidden="true" style="width:13px;height:13px"><use href="#icon-lock-closed"></use></svg>施錠中</span>`
+    : '';
+  const keyButtons = keyVisible ? `
+    <div class="key-actions key-actions--large">
+      <button class="btn-unlock btn-unlock--large" type="button" data-action="unlock-key" data-id="${key.id}" ${operable && key.lock_state !== 'unlocked' ? '' : 'disabled'}>
+        <svg class="icon" aria-hidden="true"><use href="#icon-lock-open"></use></svg>解錠
+      </button>
+      <button class="btn-lock btn-lock--large" type="button" data-action="lock-key" data-id="${key.id}" ${operable && key.lock_state === 'unlocked' ? '' : 'disabled'}>
+        <svg class="icon" aria-hidden="true"><use href="#icon-lock-closed"></use></svg>施錠
+      </button>
+    </div>` : `<p class="muted" style="margin-top:8px">デジタルキーは発行されていません</p>`;
+
+  // 延長ボタン（1〜残り時間で最大12時間・追加費用2400円以内）
+  const usedHours = Math.ceil((now - new Date(reservation.start_time).getTime()) / 3600000);
+  const maxExtend = Math.min(12 - usedHours, Math.floor(2400 / 700));
+  const extendButtons = maxExtend >= 1 ? `
+    <div class="key-extend-row">
+      ${[1, 2, 3].filter((h) => h <= maxExtend).map((h) =>
+        `<button class="btn btn-ghost btn-small" type="button" data-action="extend-reservation" data-id="${reservation.id}" data-hours="${h}">+${h}時間（¥${700 * h}）</button>`
+      ).join('')}
+    </div>` : `<p class="muted" style="font-size:0.85rem">延長できません（後続予約または上限に達しています）</p>`;
+
+  // 緊急ボタン
+  const emergencyBtn = `
+    <button class="btn-emergency" type="button" data-action="send-emergency" data-reservation-id="${reservation.id}" data-car-id="${car?.id || reservation.car_id}">
+      <svg class="icon" aria-hidden="true"><use href="#icon-alert"></use></svg>管理者に緊急通報
+    </button>`;
+
+  // 管理者向け：未解決の緊急通報一覧
+  const alertList = isAdmin() && state.emergencyAlerts.length
+    ? `<div class="key-section">
+        <h3>未解決の緊急通報</h3>
+        <div class="stack">${state.emergencyAlerts.map((a) => `
+          <div class="emergency-card">
+            <div class="emergency-info">
+              <strong>${esc(a.car_name || '車')} / ${esc(a.reporter_name || '不明')}</strong>
+              <span>${esc(formatDateTime(a.created_at))}${a.message ? ` / ${esc(a.message)}` : ''}</span>
+            </div>
+            <button class="btn btn-ghost btn-small" type="button" data-action="resolve-emergency" data-id="${a.id}">解決済みにする</button>
+          </div>`).join('')}
+        </div>
+      </div>` : '';
+
+  container.innerHTML = `
+    <div class="key-tab">
+      <div class="card key-card">
+        <div class="key-card__header">
+          <div>
+            <div class="key-card__car">${esc(car?.name || '車')}</div>
+            <div class="key-card__time">${esc(formatRange(reservation.start_time, reservation.end_time))}</div>
+          </div>
+          <span class="badge badge--busy">使用中</span>
+        </div>
+        ${lockStateBadge ? `<div style="margin:8px 0">${lockStateBadge}</div>` : ''}
+        ${keyButtons}
+      </div>
+
+      <div class="key-section">
+        <h3>予約を延長する</h3>
+        <p class="muted" style="font-size:0.85rem">後続の予約がない場合のみ延長できます（最大12時間・¥700/h）</p>
+        ${extendButtons}
+      </div>
+
+      <div class="key-section">
+        <h3>緊急通報</h3>
+        <p class="muted" style="font-size:0.85rem">事故・故障・トラブル発生時に管理者へ通知します</p>
+        ${emergencyBtn}
+      </div>
+
+      ${alertList}
+    </div>`;
+}
+
+async function extendReservation(reservationId, hours) {
+  if (!window.confirm(`予約を${hours}時間延長します（¥${700 * hours}）。よろしいですか？`)) return;
+  try {
+    const updated = await apiFetch(`/reservations/${reservationId}/extend`, {
+      method: 'PUT',
+      body: JSON.stringify({ hours }),
+    });
+    state.reservations = state.reservations.map((r) => r.id === updated.id ? updated : r);
+    renderAll();
+    toast(`予約を${hours}時間延長しました`);
+  } catch (error) {
+    if (error.message !== 'unauthorized') toast(error.message, true);
+  }
+}
+
+async function sendEmergency(reservationId, carId) {
+  const message = window.prompt('状況を入力してください（任意）', '') ?? '';
+  if (message === null) return; // キャンセル
+  try {
+    await apiFetch('/emergency-alerts/', {
+      method: 'POST',
+      body: JSON.stringify({
+        reservation_id: reservationId || null,
+        car_id: carId,
+        message: message.trim(),
+      }),
+    });
+    toast('管理者に緊急通報を送信しました', false);
+    await loadAll();
+  } catch (error) {
+    if (error.message !== 'unauthorized') toast(error.message, true);
+  }
+}
+
+async function resolveEmergency(alertId) {
+  try {
+    await apiFetch(`/emergency-alerts/${alertId}/resolve`, { method: 'POST' });
+    state.emergencyAlerts = state.emergencyAlerts.filter((a) => a.id !== alertId);
+    renderAll();
+    toast('緊急通報を解決済みにしました');
+  } catch (error) {
+    if (error.message !== 'unauthorized') toast(error.message, true);
+  }
+}
+
 function isKeyOperable(key) {
   if (!key || key.status !== 'issued') return false;
   const now = Date.now();
@@ -2317,6 +2493,9 @@ function switchTab(tab) {
   if (tab === 'carpool') {
     renderCarpools();
     void refreshCarpoolState();
+  }
+  if (tab === 'key') {
+    renderKeyTab();
   }
   if (tab === 'home') {
     renderBillingCard();
@@ -2504,6 +2683,15 @@ async function handleAction(action, id, dataset = {}) {
       break;
     case 'lock-key':
       await lockKey(id);
+      break;
+    case 'extend-reservation':
+      await extendReservation(id, Number(dataset.hours || 1));
+      break;
+    case 'send-emergency':
+      await sendEmergency(Number(dataset.reservationId || 0), Number(dataset.carId || 0));
+      break;
+    case 'resolve-emergency':
+      await resolveEmergency(id);
       break;
     default:
       break;

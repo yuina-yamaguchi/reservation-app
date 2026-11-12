@@ -701,3 +701,34 @@ def lock_key(
     db.commit()
     db.refresh(key)
     return key
+
+
+
+def extend_reservation_key(
+    db: Session,
+    reservation: models.Reservation,
+    now: datetime | None = None,
+) -> None:
+    """予約延長に合わせてデジタルキーの valid_to を更新する。"""
+    now = now or pricing.now_jst()
+    _, new_valid_to = pricing.key_validity(reservation.start_time, reservation.end_time)
+    key = (
+        db.query(models.DigitalKey)
+        .filter(
+            models.DigitalKey.reservation_id == reservation.id,
+            models.DigitalKey.purpose == "reservation",
+            models.DigitalKey.status.in_(["issued", "scheduled"]),
+        )
+        .first()
+    )
+    if key:
+        key.valid_to = new_valid_to
+        _audit(
+            db,
+            car_id=reservation.car_id,
+            actor_user_id=None,
+            digital_key_id=key.id,
+            action="extend",
+            result="success",
+            detail=f"new_valid_to={new_valid_to.isoformat()}",
+        )

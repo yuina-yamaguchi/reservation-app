@@ -8,6 +8,7 @@ from .. import key_service, models, pricing, schemas, ticket_service
 from ..auth import require_auth, user_to_dict
 from ..database import SessionLocal, get_db
 from .carpools import _application_response, _ride_query, _ride_response
+from .emergency import _to_response as _alert_response
 from .key_devices import _to_response as _device_response
 from .reservations import reservation_to_response
 
@@ -151,6 +152,23 @@ def get_state(
             .all()
         )
 
+    # 管理者は未解決の緊急通報を全件、利用者は自分が送ったものを返す
+    alert_query = (
+        db.query(models.EmergencyAlert)
+        .options(
+            joinedload(models.EmergencyAlert.reporter),
+            joinedload(models.EmergencyAlert.car),
+        )
+        .order_by(models.EmergencyAlert.id.desc())
+    )
+    if current_user.role == "admin":
+        alert_query = alert_query.filter(models.EmergencyAlert.status == "open")
+    else:
+        alert_query = alert_query.filter(
+            models.EmergencyAlert.reporter_user_id == current_user.id
+        ).limit(10)
+    emergency_alerts = [_alert_response(a) for a in alert_query.all()]
+
     return {
         "cars": cars,
         "members": members,
@@ -164,4 +182,5 @@ def get_state(
         "key_devices": [_device_response(device) for device in devices],
         "digital_keys": digital_keys,
         "master_keys": master_keys,
+        "emergency_alerts": emergency_alerts,
     }

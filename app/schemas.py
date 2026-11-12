@@ -464,6 +464,42 @@ class KeyAuditResponse(BaseModel):
     model_config = {"from_attributes": True}
 
 
+# ── 予約延長 ──────────────────────────────────────
+
+
+class ReservationExtend(BaseModel):
+    hours: int = Field(ge=1, le=12, description="延長時間（時間単位）")
+
+
+# ── 緊急通報 ──────────────────────────────────────
+
+
+class EmergencyAlertCreate(BaseModel):
+    reservation_id: int | None = None
+    car_id: int
+    message: str = Field(default="", max_length=500)
+
+    @field_validator("message")
+    @classmethod
+    def normalize_message(cls, value: str) -> str:
+        return value.strip()
+
+
+class EmergencyAlertResponse(BaseModel):
+    id: int
+    reservation_id: int | None
+    reporter_user_id: int
+    reporter_name: str | None = None
+    car_id: int
+    car_name: str | None = None
+    message: str
+    status: str
+    resolved_at: datetime | None
+    created_at: datetime
+
+    model_config = {"from_attributes": True}
+
+
 # ── 状態 ──────────────────────────────────────────
 
 
@@ -480,6 +516,7 @@ class StateResponse(BaseModel):
     key_devices: list[KeyDeviceResponse] = []
     digital_keys: list[DigitalKeyResponse] = []
     master_keys: list[DigitalKeyResponse] = []
+    emergency_alerts: list[EmergencyAlertResponse] = []
 
 
 ReservationResponse.model_rebuild()

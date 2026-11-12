@@ -491,3 +491,79 @@ def delete_reservation(
 
     db.delete(reservation)
     db.commit()
+
+
+
+MAX_RESERVATION_HOURS = 12
+EXTEND_MAX_ADDITIONAL_COST = 2400
+
+
+@router.put("/{reservation_id}/extend", response_model=schemas.ReservationResponse)
+def extend_reservation(
+    reservation_id: int,
+    payload: schemas.ReservationExtend,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(require_auth),
+):
+    reservation = (
+        db.query(models.Reservation)
+        .filter(models.Reservation.id == reservation_id)
+        .first()
+    )
+    if not reservation:
+        raise HTTPException(status_code=404, detail="予約が見つかりません")
+
+    # 本人または管理者のみ
+    if (
+        current_user.role != "admin"
+        and reservation.member_id != current_user.member_id
+    ):
+        raise HTTPException(status_code=403, detail="この予約を延長する権限がありません")
+
+    now = pricing.now_jst()
+
+    # 使用中の予約のみ延長可能
+    if reservation.start_time > now or reservation.end_time <= now:
+        raise HTTPException(
+            status_code=409, detail="延長できるのは使用中の予約のみです"
+        )
+
+    new_end = reservation.end_time + timedelta(hours=payload.hours)
+
+    # 12時間上限チェック
+    total_hours = pricing.billable_hours(reservation.start_time, new_end)
+    if total_hours > MAX_RESERVATION_HOURS:
+        raise HTTPException(
+            status_code=409,
+            detail=f"予約時間の合計が{MAX_RESERVATION_HOURS}時間を超えるため延長できません",
+        )
+
+    # 後続予約の重複チェック（バッファ込み）
+    conflict = check_conflict(
+        db, reservation.car_id, reservation.end_time, new_end, exclude_id=reservation.id
+    )
+    if conflict:
+        raise HTTPException(
+            status_code=409,
+            detail=f"延長後の時間帯に「{conflict.member.name}」の予約があります",
+        )
+
+    # 追加料金チェック（延長分の時間料金が上限2,400円以内）
+    extend_cost = pricing.HOURLY_RATE * payload.hours
+    if extend_cost > EXTEND_MAX_ADDITIONAL_COST:
+        raise HTTPException(
+            status_code=409,
+            detail=f"延長料金が上限（{EXTEND_MAX_ADDITIONAL_COST}円）を超えます",
+        )
+
+    reservation.end_time = new_end
+
+    # キーの有効期限も延長
+    key_service.extend_reservation_key(db, reservation, now)
+
+    db.commit()
+    db.refresh(reservation)
+    return reservation_to_response(
+        _with_relations(db).filter(models.Reservation.id == reservation.id).first(),
+        current_user,
+    )
