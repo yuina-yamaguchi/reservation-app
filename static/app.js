@@ -1,7 +1,7 @@
 'use strict';
 
 const API = '/api';
-const CACHE_KEY = 'reservation-app-state-v5';
+const CACHE_KEY = 'reservation-app-state-v6';
 const CARPOOL_SEEN_KEY_PREFIX = 'reservation-app-carpool-seen-v1:';
 const CARPOOL_POLL_MS = 60000;
 let carpoolPollTimer = null;
