@@ -48,7 +48,7 @@ def get_state(
     cars = db.query(models.Car).order_by(models.Car.id).all()
     members = db.query(models.Member).order_by(models.Member.id).all()
 
-    # 終了済み予約は直近60日分のみ返す（今後の予約は全件）
+    # 終了済み予約は直近60日分のみ返す（今後・使用中の予約は全件含まれる）
     cutoff = now - timedelta(days=_PAST_RESERVATION_DAYS)
     reservations = [
         reservation_to_response(reservation, current_user)
@@ -62,12 +62,7 @@ def get_state(
                 joinedload(models.Reservation.charge),
                 selectinload(models.Reservation.digital_keys_rel),
             )
-            .filter(
-                or_(
-                    models.Reservation.end_time >= cutoff,
-                    models.Reservation.start_time >= now,
-                )
-            )
+            .filter(models.Reservation.end_time >= cutoff)
             .order_by(models.Reservation.start_time)
             .all()
         )
