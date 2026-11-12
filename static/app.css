@@ -1643,3 +1643,38 @@ select:focus {
   background: #f1f5f9;
   color: #475569;
 }
+
+
+/* ── 翌日リマインドバナー ───────────────────────── */
+
+.reminder-banner {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 14px 18px;
+  margin-bottom: 16px;
+  border: 1.5px solid var(--green-200);
+  border-radius: var(--radius);
+  background: var(--green-50);
+  color: var(--ink);
+  font-size: 0.9rem;
+}
+
+.reminder-banner__icon {
+  flex-shrink: 0;
+  margin-top: 2px;
+  color: var(--green-600);
+}
+
+.reminder-banner strong {
+  display: block;
+  margin-bottom: 4px;
+  color: var(--green-700);
+  font-size: 0.95rem;
+}
+
+.reminder-list {
+  margin: 0;
+  padding-left: 1.2em;
+  line-height: 1.8;
+}

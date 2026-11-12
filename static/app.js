@@ -126,6 +126,7 @@ const els = {
   keyAuditList: $('#keyAuditList'),
   keyAuditRefresh: $('#keyAuditRefresh'),
   toast: $('#toast'),
+  reminderBanner: $('#reminderBanner'),
   carDialog: $('#carDialog'),
   memberDialog: $('#memberDialog'),
   userDialog: $('#userDialog'),
@@ -713,6 +714,39 @@ function emptyState(message) {
 
 function renderHome() {
   const now = Date.now();
+
+  // 翌日リマインドバナー
+  if (els.reminderBanner) {
+    const tomorrow = new Date();
+    tomorrow.setDate(tomorrow.getDate() + 1);
+    const tomorrowStart = new Date(tomorrow.getFullYear(), tomorrow.getMonth(), tomorrow.getDate()).getTime();
+    const tomorrowEnd = tomorrowStart + 24 * 60 * 60 * 1000;
+    const myMemberId = state.currentUser?.member_id;
+
+    const tomorrowReservations = state.reservations.filter((r) => {
+      const start = new Date(r.start_time).getTime();
+      if (start < tomorrowStart || start >= tomorrowEnd) return false;
+      if (isAdmin()) return true;
+      return r.member_id === myMemberId;
+    }).sort((a, b) => new Date(a.start_time).getTime() - new Date(b.start_time).getTime());
+
+    if (tomorrowReservations.length > 0) {
+      const items = tomorrowReservations.map((r) =>
+        `<li>${esc(r.car?.name || '車')}（${esc(memberDisplayName(r.member))}）${esc(formatRange(r.start_time, r.end_time))}</li>`
+      ).join('');
+      els.reminderBanner.innerHTML = `
+        <div class="reminder-banner">
+          <svg class="icon reminder-banner__icon" aria-hidden="true"><use href="#icon-calendar-plus"></use></svg>
+          <div>
+            <strong>明日の予約があります</strong>
+            <ul class="reminder-list">${items}</ul>
+          </div>
+        </div>`;
+      els.reminderBanner.hidden = false;
+    } else {
+      els.reminderBanner.hidden = true;
+    }
+  }
 
   if (!state.cars.length) {
     els.carStatusList.innerHTML = emptyState(
